@@ -11,6 +11,7 @@
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
+    "data:generate": "node scripts/generate-northwind.mjs",
     "test": "npm run test:unit && npm run test:api && npm run test:e2e",
     "test:unit": "vitest run --config vitest.config.ts tests/unit",
     "test:api": "playwright test api",

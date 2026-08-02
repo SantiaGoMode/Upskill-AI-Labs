@@ -53,6 +53,54 @@ export function ensureLabSchema() {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS model_runs_attempt_id_idx ON model_runs (attempt_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS judge_results (
+        id TEXT PRIMARY KEY NOT NULL,
+        submission_id TEXT NOT NULL REFERENCES lab_submissions(id),
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        judge_index INTEGER NOT NULL,
+        result_json TEXT NOT NULL,
+        usage_json TEXT NOT NULL,
+        cost_json TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS judge_results_submission_id_idx ON judge_results (submission_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS human_reviews (
+        id TEXT PRIMARY KEY NOT NULL,
+        submission_id TEXT NOT NULL REFERENCES lab_submissions(id),
+        reviewer_email TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS human_reviews_submission_id_idx ON human_reviews (submission_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS score_appeals (
+        id TEXT PRIMARY KEY NOT NULL,
+        submission_id TEXT NOT NULL REFERENCES lab_submissions(id),
+        owner_email TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT DEFAULT 'open' NOT NULL,
+        resolution TEXT DEFAULT '' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS score_appeals_submission_id_idx ON score_appeals (submission_id)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS score_appeals_owner_email_idx ON score_appeals (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS regression_runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        owner_email TEXT NOT NULL,
+        attempt_id TEXT NOT NULL REFERENCES lab_attempts(id),
+        set_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        usage_json TEXT NOT NULL,
+        cost_json TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS regression_runs_owner_email_idx ON regression_runs (owner_email)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS regression_runs_attempt_id_idx ON regression_runs (attempt_id)"),
       ]);
       const columns = await env.DB.prepare("PRAGMA table_info(lab_attempts)").all<{ name: string }>();
       if (!columns.results.some((column) => column.name === "owner_email")) {

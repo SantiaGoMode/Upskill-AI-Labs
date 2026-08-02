@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { initialDraft, intakeFields, labSources, type IntakeDraft, type IntakeKey } from "./lab-data";
 import type { AttemptPayload, DeterministicEvalResult, PersistedAttempt } from "./lib/attempt-types";
 import type { ModelProvider, PersistedModelRun, ProviderStatus } from "./lib/model-run-types";
+import { ScoreAppeal } from "./score-appeal";
 
 const STORAGE_KEY = "upskill-ai-labs:lab-01";
 
@@ -36,6 +37,7 @@ export function LabWorkspace() {
   const [submitted, setSubmitted] = useState(false);
   const [attemptId, setAttemptId] = useState<string>("");
   const [evaluation, setEvaluation] = useState<DeterministicEvalResult | null>(null);
+  const [submissionId, setSubmissionId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [serverStatus, setServerStatus] = useState<"local" | "saving" | "saved" | "error">("local");
   const [hydrated, setHydrated] = useState(false);
@@ -62,7 +64,7 @@ export function LabWorkspace() {
           if (parsed.attemptId) {
             const response = await fetch(`/api/attempts?id=${encodeURIComponent(parsed.attemptId)}`);
             if (response.ok) {
-              const data = await response.json() as { attempt: PersistedAttempt; evaluation: DeterministicEvalResult | null };
+              const data = await response.json() as { attempt: PersistedAttempt; evaluation: DeterministicEvalResult | null; submissionId: string | null };
               setDraft({ ...initialDraft, ...data.attempt.draft });
               setPrompt(data.attempt.prompt);
               setVerification(data.attempt.verification);
@@ -70,6 +72,7 @@ export function LabWorkspace() {
               setSecondsLeft(data.attempt.secondsRemaining);
               setSubmitted(data.attempt.status === "submitted");
               setEvaluation(data.evaluation);
+              setSubmissionId(data.submissionId ?? "");
               setServerStatus("saved");
 
               const runResponse = await fetch(`/api/model-runs?attemptId=${encodeURIComponent(parsed.attemptId)}`);
@@ -192,8 +195,9 @@ export function LabWorkspace() {
         body: JSON.stringify({ action: "submit", id, payload: currentPayload() }),
       });
       if (!response.ok) throw new Error("Submission could not be evaluated");
-      const data = await response.json() as { result: DeterministicEvalResult };
+      const data = await response.json() as { submissionId: string; result: DeterministicEvalResult };
       setEvaluation(data.result);
+      setSubmissionId(data.submissionId);
       setSubmitted(true);
       setTimerRunning(false);
       setServerStatus("saved");
@@ -257,7 +261,7 @@ export function LabWorkspace() {
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Upskill AI Labs home"><span className="brand-mark">U</span><span>Upskill AI Labs</span></a>
-        <div className="lab-identity"><span className="eyebrow">Program manager pathway</span><strong>Lab 1 of 6</strong></div>
+        <div className="lab-identity"><span className="eyebrow">Program manager pathway</span><strong>Lab 1 of 8</strong></div>
         <div className={`session-status ${serverStatus}`}><span className="status-dot" aria-hidden="true" />{serverStatus === "saving" ? "Saving to lab record…" : serverStatus === "saved" ? `Lab record saved${savedAt ? ` · ${savedAt}` : ""}` : serverStatus === "error" ? "Server unavailable · local draft safe" : "Draft saved locally"}</div>
       </header>
 
@@ -294,7 +298,7 @@ export function LabWorkspace() {
         </aside>
       </section>
 
-      {submissionOpen && <SubmissionDialog draft={draft} updateField={updateField} verification={verification} setVerification={setVerification} completed={completed} submitted={submitted} submitting={submitting} evaluation={evaluation} onSubmit={submitAttempt} onRevise={() => { setEvaluation(null); setSubmitted(false); }} onClose={() => setSubmissionOpen(false)} />}
+      {submissionOpen && <SubmissionDialog draft={draft} updateField={updateField} verification={verification} setVerification={setVerification} completed={completed} submitted={submitted} submitting={submitting} evaluation={evaluation} submissionId={submissionId} onSubmit={submitAttempt} onRevise={() => { setEvaluation(null); setSubmitted(false); }} onClose={() => setSubmissionOpen(false)} />}
     </main>
   );
 }
@@ -321,8 +325,8 @@ function Field({ label, value, placeholder, onChange }: { label: string; value: 
   return <label>{label}<input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function SubmissionDialog({ draft, updateField, verification, setVerification, completed, submitted, submitting, evaluation, onSubmit, onRevise, onClose }: { draft: IntakeDraft; updateField: (key: IntakeKey, value: string) => void; verification: string; setVerification: (value: string) => void; completed: number; submitted: boolean; submitting: boolean; evaluation: DeterministicEvalResult | null; onSubmit: () => void; onRevise: () => void; onClose: () => void }) {
-  return <div className="dialog-backdrop" role="presentation"><section className="submission-dialog" role="dialog" aria-modal="true" aria-labelledby="submission-title"><header><div><span className="eyebrow">Lab 1 deliverable</span><h2 id="submission-title">Validated intake record</h2></div><button type="button" onClick={onClose} aria-label="Close submission">×</button></header>{submitted && <div className={`submission-notice${evaluation?.passed ? " passed" : " revision"}`} aria-live="polite"><strong>{evaluation?.passed ? "Deterministic gate passed." : "Revision required before facilitator review."}</strong><span>{evaluation?.summary ?? "Your submission is stored in the lab record."}</span></div>}<div className="submission-body">{evaluation ? <EvaluationPanel result={evaluation} onRevise={onRevise} /> : <><div className="field-grid">{intakeFields.map(([key, label]) => <label key={key} className={key === "businessProblem" || key === "rationale" || key === "dependencies" ? "wide" : ""}>{label}{key === "businessProblem" || key === "rationale" || key === "dependencies" ? <textarea rows={3} value={draft[key]} onChange={(event) => updateField(key, event.target.value)} placeholder="Use Unknown when evidence is absent" /> : <input value={draft[key]} onChange={(event) => updateField(key, event.target.value)} placeholder="Unknown when unsupported" />}</label>)}</div><label className="verification-field">Verification note<textarea rows={5} value={verification} onChange={(event) => setVerification(event.target.value)} placeholder="Name material fields checked manually, sources supplied to AI, withheld passages, and remaining uncertainty." /></label></>}</div><footer><span><strong>{completed}</strong> of 19 fields completed</span><div><button className="quiet-action dark" type="button" onClick={onClose}>Keep working</button>{!evaluation && <button className="primary-action" type="button" onClick={onSubmit} disabled={completed < 19 || !verification.trim() || submitting}>{submitting ? "Evaluating…" : "Submit for review"}</button>}</div></footer></section></div>;
+function SubmissionDialog({ draft, updateField, verification, setVerification, completed, submitted, submitting, evaluation, submissionId, onSubmit, onRevise, onClose }: { draft: IntakeDraft; updateField: (key: IntakeKey, value: string) => void; verification: string; setVerification: (value: string) => void; completed: number; submitted: boolean; submitting: boolean; evaluation: DeterministicEvalResult | null; submissionId: string; onSubmit: () => void; onRevise: () => void; onClose: () => void }) {
+  return <div className="dialog-backdrop" role="presentation"><section className="submission-dialog" role="dialog" aria-modal="true" aria-labelledby="submission-title"><header><div><span className="eyebrow">Lab 1 deliverable</span><h2 id="submission-title">Validated intake record</h2></div><button type="button" onClick={onClose} aria-label="Close submission">×</button></header>{submitted && <div className={`submission-notice${evaluation?.passed ? " passed" : " revision"}`} aria-live="polite"><strong>{evaluation?.passed ? "Deterministic gate passed." : "Revision required before facilitator review."}</strong><span>{evaluation?.summary ?? "Your submission is stored in the lab record."}</span></div>}<div className="submission-body">{evaluation ? <><EvaluationPanel result={evaluation} onRevise={onRevise} />{submissionId && <ScoreAppeal submissionId={submissionId} />}</> : <><div className="field-grid">{intakeFields.map(([key, label]) => <label key={key} className={key === "businessProblem" || key === "rationale" || key === "dependencies" ? "wide" : ""}>{label}{key === "businessProblem" || key === "rationale" || key === "dependencies" ? <textarea rows={3} value={draft[key]} onChange={(event) => updateField(key, event.target.value)} placeholder="Use Unknown when evidence is absent" /> : <input value={draft[key]} onChange={(event) => updateField(key, event.target.value)} placeholder="Unknown when unsupported" />}</label>)}</div><label className="verification-field">Verification note<textarea rows={5} value={verification} onChange={(event) => setVerification(event.target.value)} placeholder="Name material fields checked manually, sources supplied to AI, withheld passages, and remaining uncertainty." /></label></>}</div><footer><span><strong>{completed}</strong> of 19 fields completed</span><div><button className="quiet-action dark" type="button" onClick={onClose}>Keep working</button>{!evaluation && <button className="primary-action" type="button" onClick={onSubmit} disabled={completed < 19 || !verification.trim() || submitting}>{submitting ? "Evaluating…" : "Submit for review"}</button>}</div></footer></section></div>;
 }
 
 function EvaluationPanel({ result, onRevise }: { result: DeterministicEvalResult; onRevise: () => void }) {

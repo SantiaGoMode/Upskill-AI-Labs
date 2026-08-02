@@ -4,6 +4,7 @@ export type RequestIdentity = {
   email: string;
   displayName: string;
   source: "trusted-header" | "local";
+  role: "learner" | "facilitator";
 };
 
 export function getRequestIdentity(request: Request): RequestIdentity | null {
@@ -19,7 +20,10 @@ export function getRequestIdentity(request: Request): RequestIdentity | null {
         displayName = email;
       }
     }
-    return { email, displayName, source: "trusted-header" };
+    const role = request.headers.get("oai-authenticated-user-role") === "facilitator"
+      ? "facilitator"
+      : "learner";
+    return { email, displayName, source: "trusted-header", role };
   }
 
   const hostname = new URL(request.url).hostname;
@@ -32,6 +36,7 @@ export function getRequestIdentity(request: Request): RequestIdentity | null {
       email: configured || "local-developer@upskill.invalid",
       displayName: "Local learner",
       source: "local",
+      role: bindings.LOCAL_DEV_ROLE === "learner" ? "learner" : "facilitator",
     };
   }
 
@@ -40,4 +45,8 @@ export function getRequestIdentity(request: Request): RequestIdentity | null {
 
 export function unauthorizedResponse() {
   return Response.json({ error: "Authentication is required" }, { status: 401 });
+}
+
+export function facilitatorRequiredResponse() {
+  return Response.json({ error: "Facilitator access is required" }, { status: 403 });
 }

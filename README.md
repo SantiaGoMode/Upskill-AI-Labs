@@ -31,11 +31,20 @@ theoretical AI knowledge to practical, day-to-day execution.
 
 ## Status
 
-The usable MVP now includes interactive Labs 1–6, synthetic evidence packs, timeboxed artifact
+The Phase 1 application now includes interactive Labs 1–8, synthetic evidence packs, timeboxed artifact
 workspaces, durable D1-backed attempts, learner-owned history, and browser-local draft fallback.
 Its policy-bounded AI workbench supports Gemini, OpenAI, Anthropic, and local Ollama models. Each
 run stores and displays the output, provider trace, token usage, and estimated USD cost. Submitted
 artifacts receive a stored deterministic rubric result before human calibration.
+
+Northwind v1 provides 300 relational records and 40 synthetic documents with planted duplicate,
+stale-evidence, conflict, prompt-injection, and restricted-data failure modes. The Prompt Lab adds a
+20-case regression set with a zero-token preview and an explicitly confirmed live batch mode.
+
+Facilitators can run a three-provider rubric-judge ensemble, record human calibration bands and
+rationales, resolve learner appeals, and monitor quadratic-weighted agreement per rubric dimension.
+Dimensions below the 0.75 agreement threshold are marked provisional. Saved human reviews become
+few-shot calibration anchors for later judge runs. Live batch and ensemble runs are never automatic.
 
 ## Run the app
 
@@ -47,6 +56,7 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. Use `npm test`, `npm run lint`, and `npm run build` for validation.
+Use `npm run data:generate` to deterministically rebuild the Northwind v1 fixture corpus.
 
 ## Configure model providers
 
@@ -74,7 +84,9 @@ disabled. An unknown model remains explicitly unmetered until its rate is added.
 
 Attempt reads, writes, submissions, histories, and model runs are scoped to a learner identity on
 the server. Local development uses `LOCAL_DEV_USER_EMAIL`. A trusted reverse proxy can supply the
-`oai-authenticated-user-email` header; non-local requests without an identity are rejected.
+`oai-authenticated-user-email` header and may grant facilitator access with
+`oai-authenticated-user-role: facilitator`; non-local requests without an identity are rejected.
+Local development defaults to facilitator access and can be restricted with `LOCAL_DEV_ROLE=learner`.
 
 ## Project page
 

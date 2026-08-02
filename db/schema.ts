@@ -62,3 +62,71 @@ export const modelRuns = sqliteTable(
   },
   (table) => [index("model_runs_attempt_id_idx").on(table.attemptId)],
 );
+
+export const judgeResults = sqliteTable(
+  "judge_results",
+  {
+    id: text("id").primaryKey(),
+    submissionId: text("submission_id").notNull().references(() => labSubmissions.id),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    judgeIndex: integer("judge_index").notNull(),
+    resultJson: text("result_json").notNull(),
+    usageJson: text("usage_json").notNull(),
+    costJson: text("cost_json").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("judge_results_submission_id_idx").on(table.submissionId)],
+);
+
+export const humanReviews = sqliteTable(
+  "human_reviews",
+  {
+    id: text("id").primaryKey(),
+    submissionId: text("submission_id").notNull().references(() => labSubmissions.id),
+    reviewerEmail: text("reviewer_email").notNull(),
+    resultJson: text("result_json").notNull(),
+    rationale: text("rationale").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("human_reviews_submission_id_idx").on(table.submissionId)],
+);
+
+export const scoreAppeals = sqliteTable(
+  "score_appeals",
+  {
+    id: text("id").primaryKey(),
+    submissionId: text("submission_id").notNull().references(() => labSubmissions.id),
+    ownerEmail: text("owner_email").notNull(),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("open"),
+    resolution: text("resolution").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("score_appeals_submission_id_idx").on(table.submissionId),
+    index("score_appeals_owner_email_idx").on(table.ownerEmail),
+  ],
+);
+
+export const regressionRuns = sqliteTable(
+  "regression_runs",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    attemptId: text("attempt_id").notNull().references(() => labAttempts.id),
+    setId: text("set_id").notNull(),
+    provider: text("provider").notNull(),
+    mode: text("mode").notNull(),
+    prompt: text("prompt").notNull(),
+    resultJson: text("result_json").notNull(),
+    usageJson: text("usage_json").notNull(),
+    costJson: text("cost_json").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("regression_runs_owner_email_idx").on(table.ownerEmail),
+    index("regression_runs_attempt_id_idx").on(table.attemptId),
+  ],
+);

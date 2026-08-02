@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       .where(and(eq(labAttempts.id, id), eq(labAttempts.ownerEmail, identity.email))).limit(1);
     if (!row) return Response.json({ error: "Attempt not found" }, { status: 404 });
     const [latestEvaluation] = await db
-      .select({ resultJson: evalResults.resultJson })
+      .select({ submissionId: labSubmissions.id, resultJson: evalResults.resultJson })
       .from(labSubmissions)
       .innerJoin(evalResults, eq(evalResults.submissionId, labSubmissions.id))
       .where(eq(labSubmissions.attemptId, id))
@@ -67,6 +67,7 @@ export async function GET(request: Request) {
     return Response.json({
       attempt: toAttempt(row),
       evaluation: latestEvaluation ? parseJson(latestEvaluation.resultJson, null) : null,
+      submissionId: latestEvaluation?.submissionId ?? null,
     });
   } catch (error) {
     return errorResponse(error);
