@@ -101,6 +101,79 @@ export function ensureLabSchema() {
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS regression_runs_owner_email_idx ON regression_runs (owner_email)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS regression_runs_attempt_id_idx ON regression_runs (attempt_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS workflow_maps (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, role_description TEXT NOT NULL,
+        intake_tier TEXT NOT NULL, industry TEXT NOT NULL, seniority TEXT NOT NULL,
+        artifact_shapes_json TEXT DEFAULT '[]' NOT NULL, workflows_json TEXT DEFAULT '[]' NOT NULL,
+        priority_workflow_ids_json TEXT DEFAULT '[]' NOT NULL, status TEXT DEFAULT 'draft' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS workflow_maps_owner_email_idx ON workflow_maps (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS curriculum_instances (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL,
+        workflow_map_id TEXT NOT NULL REFERENCES workflow_maps(id), recipe_version TEXT NOT NULL,
+        route_json TEXT NOT NULL, adaptations_json TEXT NOT NULL, estimated_minutes INTEGER NOT NULL,
+        status TEXT DEFAULT 'active' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS curriculum_instances_owner_email_idx ON curriculum_instances (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS redaction_experiments (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL,
+        workflow_map_id TEXT NOT NULL REFERENCES workflow_maps(id), tier TEXT NOT NULL,
+        transfer_score INTEGER, notes TEXT DEFAULT '' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, measured_at TEXT
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS redaction_experiments_tier_idx ON redaction_experiments (tier)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS policy_profiles (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
+        status TEXT DEFAULT 'draft' NOT NULL, allowed_intake_tier TEXT DEFAULT 'T1' NOT NULL,
+        data_classes_json TEXT NOT NULL, approved_models_json TEXT NOT NULL,
+        prohibited_uses_json TEXT NOT NULL, disclosure_rules_json TEXT NOT NULL,
+        human_review_rules_json TEXT NOT NULL, prompt_retention_days INTEGER DEFAULT 90 NOT NULL,
+        updated_by TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS policy_profiles_status_idx ON policy_profiles (status)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS curriculum_versions (
+        id TEXT PRIMARY KEY NOT NULL, parent_id TEXT, owner_email TEXT NOT NULL, name TEXT NOT NULL,
+        version INTEGER NOT NULL, status TEXT DEFAULT 'draft' NOT NULL, content_json TEXT NOT NULL,
+        change_summary TEXT DEFAULT '' NOT NULL, reviewer_email TEXT, reviewed_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS curriculum_versions_status_idx ON curriculum_versions (status)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohorts (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, name TEXT NOT NULL,
+        curriculum_version_id TEXT NOT NULL REFERENCES curriculum_versions(id),
+        learner_emails_json TEXT DEFAULT '[]' NOT NULL, workflow_summary_json TEXT DEFAULT '{}' NOT NULL,
+        status TEXT DEFAULT 'draft' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS cohorts_owner_email_idx ON cohorts (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS workflow_baselines (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, workflow_id TEXT NOT NULL,
+        workflow_name TEXT NOT NULL, metric_name TEXT NOT NULL, unit TEXT NOT NULL,
+        baseline_value TEXT NOT NULL, target_value TEXT NOT NULL, notes TEXT DEFAULT '' NOT NULL,
+        measured_at TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS workflow_baselines_owner_email_idx ON workflow_baselines (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS workflow_measurements (
+        id TEXT PRIMARY KEY NOT NULL, baseline_id TEXT NOT NULL REFERENCES workflow_baselines(id),
+        owner_email TEXT NOT NULL, value TEXT NOT NULL, source_type TEXT NOT NULL,
+        reflection TEXT NOT NULL, measured_at TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS workflow_measurements_baseline_id_idx ON workflow_measurements (baseline_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS capability_claims (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, capability_key TEXT NOT NULL,
+        label TEXT NOT NULL, band TEXT NOT NULL, status TEXT DEFAULT 'active' NOT NULL,
+        evidence_json TEXT NOT NULL, earned_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS capability_claims_owner_email_idx ON capability_claims (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_events (
+        id TEXT PRIMARY KEY NOT NULL, actor_email TEXT NOT NULL, action TEXT NOT NULL,
+        entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details_json TEXT DEFAULT '{}' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS audit_events_entity_idx ON audit_events (entity_type, entity_id)"),
       ]);
       const columns = await env.DB.prepare("PRAGMA table_info(lab_attempts)").all<{ name: string }>();
       if (!columns.results.some((column) => column.name === "owner_email")) {

@@ -7,6 +7,7 @@ import { curriculumSource } from "../../curriculum-data";
 import { estimateModelCost } from "../../lib/model-pricing";
 import { executeModelProvider, getProviderStatuses, ProviderError } from "../../lib/model-providers";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { activePolicy, permitsDataClass, permitsProvider } from "../../lib/governance";
 import type {
   ModelCost,
   ModelProvider,
@@ -94,7 +95,12 @@ export async function GET(request: Request) {
     if (!identity) return unauthorizedResponse();
     const searchParams = new URL(request.url).searchParams;
     if (searchParams.get("config") === "providers") {
-      return Response.json({ providers: getProviderStatuses() });
+      const policy = await activePolicy();
+      return Response.json({ providers: getProviderStatuses().map((provider) => ({
+        ...provider,
+        allowed: permitsProvider(policy, provider.provider),
+        configured: provider.configured && permitsProvider(policy, provider.provider),
+      })), policy: { id: policy.id, name: policy.name, version: policy.version } });
     }
     const attemptId = searchParams.get("attemptId");
     if (!attemptId) return Response.json({ error: "attemptId is required" }, { status: 400 });
@@ -143,6 +149,10 @@ export async function POST(request: Request) {
     if (!supportedProviders.includes(provider)) {
       return Response.json({ error: "Unsupported model provider" }, { status: 400 });
     }
+    const policy = await activePolicy();
+    if (!permitsProvider(policy, provider)) {
+      return Response.json({ error: `${provider} is not approved by the active governance policy` }, { status: 403 });
+    }
 
     const db = getDb();
     const [attempt] = await db.select({ id: labAttempts.id, labId: labAttempts.labId }).from(labAttempts)
@@ -151,7 +161,8 @@ export async function POST(request: Request) {
     const selectedSourceRecords = selectedSources.map((sourceId) => attempt.labId === "lab-01"
       ? labSources.find((source) => source.id === sourceId)
       : curriculumSource(attempt.labId, sourceId));
-    if (selectedSourceRecords.some((source) => !source || source.classification !== "Internal")) {
+    const normalizedClass = (classification: string) => classification === "Internal" ? "Internal" : "Confidential";
+    if (selectedSourceRecords.some((source) => !source || !permitsDataClass(policy, normalizedClass(source.classification)))) {
       return Response.json(
         { error: "The request includes a source that is not permitted in this AI workbench" },
         { status: 400 },

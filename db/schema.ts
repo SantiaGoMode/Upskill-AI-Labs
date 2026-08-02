@@ -130,3 +130,173 @@ export const regressionRuns = sqliteTable(
     index("regression_runs_attempt_id_idx").on(table.attemptId),
   ],
 );
+
+export const workflowMaps = sqliteTable(
+  "workflow_maps",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    roleDescription: text("role_description").notNull(),
+    intakeTier: text("intake_tier").notNull(),
+    industry: text("industry").notNull(),
+    seniority: text("seniority").notNull(),
+    artifactShapesJson: text("artifact_shapes_json").notNull().default("[]"),
+    workflowsJson: text("workflows_json").notNull().default("[]"),
+    priorityWorkflowIdsJson: text("priority_workflow_ids_json").notNull().default("[]"),
+    status: text("status").notNull().default("draft"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("workflow_maps_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const curriculumInstances = sqliteTable(
+  "curriculum_instances",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    workflowMapId: text("workflow_map_id").notNull().references(() => workflowMaps.id),
+    recipeVersion: text("recipe_version").notNull(),
+    routeJson: text("route_json").notNull(),
+    adaptationsJson: text("adaptations_json").notNull(),
+    estimatedMinutes: integer("estimated_minutes").notNull(),
+    status: text("status").notNull().default("active"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("curriculum_instances_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const redactionExperiments = sqliteTable(
+  "redaction_experiments",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    workflowMapId: text("workflow_map_id").notNull().references(() => workflowMaps.id),
+    tier: text("tier").notNull(),
+    transferScore: integer("transfer_score"),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    measuredAt: text("measured_at"),
+  },
+  (table) => [index("redaction_experiments_tier_idx").on(table.tier)],
+);
+
+export const policyProfiles = sqliteTable(
+  "policy_profiles",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    version: integer("version").notNull(),
+    status: text("status").notNull().default("draft"),
+    allowedIntakeTier: text("allowed_intake_tier").notNull().default("T1"),
+    dataClassesJson: text("data_classes_json").notNull(),
+    approvedModelsJson: text("approved_models_json").notNull(),
+    prohibitedUsesJson: text("prohibited_uses_json").notNull(),
+    disclosureRulesJson: text("disclosure_rules_json").notNull(),
+    humanReviewRulesJson: text("human_review_rules_json").notNull(),
+    promptRetentionDays: integer("prompt_retention_days").notNull().default(90),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("policy_profiles_status_idx").on(table.status)],
+);
+
+export const curriculumVersions = sqliteTable(
+  "curriculum_versions",
+  {
+    id: text("id").primaryKey(),
+    parentId: text("parent_id"),
+    ownerEmail: text("owner_email").notNull(),
+    name: text("name").notNull(),
+    version: integer("version").notNull(),
+    status: text("status").notNull().default("draft"),
+    contentJson: text("content_json").notNull(),
+    changeSummary: text("change_summary").notNull().default(""),
+    reviewerEmail: text("reviewer_email"),
+    reviewedAt: text("reviewed_at"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("curriculum_versions_status_idx").on(table.status)],
+);
+
+export const cohorts = sqliteTable(
+  "cohorts",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    name: text("name").notNull(),
+    curriculumVersionId: text("curriculum_version_id").notNull().references(() => curriculumVersions.id),
+    learnerEmailsJson: text("learner_emails_json").notNull().default("[]"),
+    workflowSummaryJson: text("workflow_summary_json").notNull().default("{}"),
+    status: text("status").notNull().default("draft"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("cohorts_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const workflowBaselines = sqliteTable(
+  "workflow_baselines",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    workflowId: text("workflow_id").notNull(),
+    workflowName: text("workflow_name").notNull(),
+    metricName: text("metric_name").notNull(),
+    unit: text("unit").notNull(),
+    baselineValue: text("baseline_value").notNull(),
+    targetValue: text("target_value").notNull(),
+    notes: text("notes").notNull().default(""),
+    measuredAt: text("measured_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("workflow_baselines_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const workflowMeasurements = sqliteTable(
+  "workflow_measurements",
+  {
+    id: text("id").primaryKey(),
+    baselineId: text("baseline_id").notNull().references(() => workflowBaselines.id),
+    ownerEmail: text("owner_email").notNull(),
+    value: text("value").notNull(),
+    sourceType: text("source_type").notNull(),
+    reflection: text("reflection").notNull(),
+    measuredAt: text("measured_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("workflow_measurements_baseline_id_idx").on(table.baselineId)],
+);
+
+export const capabilityClaims = sqliteTable(
+  "capability_claims",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    capabilityKey: text("capability_key").notNull(),
+    label: text("label").notNull(),
+    band: text("band").notNull(),
+    status: text("status").notNull().default("active"),
+    evidenceJson: text("evidence_json").notNull(),
+    earnedAt: text("earned_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("capability_claims_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: text("id").primaryKey(),
+    actorEmail: text("actor_email").notNull(),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    detailsJson: text("details_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("audit_events_entity_idx").on(table.entityType, table.entityId)],
+);

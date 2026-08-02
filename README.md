@@ -38,6 +38,19 @@ rationales, resolve learner appeals, and monitor quadratic-weighted agreement pe
 Dimensions below the 0.75 agreement threshold are marked provisional. Saved human reviews become
 few-shot calibration anchors for later judge runs. Live batch and ensemble runs are never automatic.
 
+Phase 2 is now available from the application navigation. Bring Your Own Job onboarding supports
+description-only T0 and client-side-redacted T1 intake. T1 sends only structural counts and markers;
+the API explicitly rejects raw artifact fields. Learners review nine proposed workflows, choose
+three priorities, and receive a visible adaptive route that preserves the common eight-lab assessed
+spine while varying scenario skin, pacing, and remediation.
+
+Trainer Studio supports curriculum forks, draft edits, a required human review gate, publishing,
+cohort composition, and aggregate workflow-demand signals. The governance plane versions allowed
+BYOJ tiers, data classes, model providers, retention, prohibited uses, disclosures, and human-review
+rules; those rules now gate model execution and intake. Its actor-linked audit log starts the SOC 2
+evidence trail. The Capability Ledger creates evidence-linked, 180-day capability claims from
+assessed submissions and supports self-attested workflow baselines and day-30 remeasurement.
+
 ## Run the app
 
 Requires Node.js 22.13 or newer.
