@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 export type RequestIdentity = {
   email: string;
   displayName: string;
-  source: "sites" | "local";
+  source: "trusted-header" | "local";
 };
 
 export function getRequestIdentity(request: Request): RequestIdentity | null {
@@ -19,7 +19,7 @@ export function getRequestIdentity(request: Request): RequestIdentity | null {
         displayName = email;
       }
     }
-    return { email, displayName, source: "sites" };
+    return { email, displayName, source: "trusted-header" };
   }
 
   const hostname = new URL(request.url).hostname;

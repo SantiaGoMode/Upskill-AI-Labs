@@ -52,7 +52,7 @@ Open `http://localhost:3000`. Use `npm test`, `npm run lint`, and `npm run build
 
 Copy `.env.example` to `.env` for Vinext development, add only the providers you want to use,
 and restart the server. `.dev.vars.example` contains the equivalent Cloudflare bindings. API
-keys remain server-side and must be configured as hosted secrets rather than committed.
+keys remain server-side and must never be committed or exposed to browser code.
 
 | Provider | Default model | Required setting |
 |---|---|---|
@@ -70,9 +70,14 @@ The workbench sends only sources permitted by the selected lab and persists the 
 ID, model, duration, supplied source IDs, token usage, and estimated cost. OpenAI storage is
 disabled. An unknown model remains explicitly unmetered until its rate is added.
 
-## Authentication and ownership
+## Local identity and ownership
 
-Hosted requests use the authenticated user email supplied by the Sites runtime. Attempt reads,
-writes, submissions, histories, and model runs are scoped to that identity on the server. A
-localhost-only identity fallback is available through `LOCAL_DEV_USER_EMAIL` for development and
-automated tests; hosted requests without an authenticated identity are rejected.
+Attempt reads, writes, submissions, histories, and model runs are scoped to a learner identity on
+the server. Local development uses `LOCAL_DEV_USER_EMAIL`. A trusted reverse proxy can supply the
+`oai-authenticated-user-email` header; non-local requests without an identity are rejected.
+
+## Project page
+
+The application itself runs locally. A separate static project page in `docs/` describes the
+product and is deployed to GitHub Pages by `.github/workflows/pages.yml`; it does not receive model
+keys or expose a live application runtime.
