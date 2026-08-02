@@ -227,14 +227,123 @@ export const cohorts = sqliteTable(
   {
     id: text("id").primaryKey(),
     ownerEmail: text("owner_email").notNull(),
+    organizationId: text("organization_id"),
     name: text("name").notNull(),
     curriculumVersionId: text("curriculum_version_id").notNull().references(() => curriculumVersions.id),
     learnerEmailsJson: text("learner_emails_json").notNull().default("[]"),
     workflowSummaryJson: text("workflow_summary_json").notNull().default("{}"),
     status: text("status").notNull().default("draft"),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
+    archivedAt: text("archived_at"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("cohorts_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const organizations = sqliteTable(
+  "organizations",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    ownerEmail: text("owner_email").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("organizations_owner_email_idx").on(table.ownerEmail)],
+);
+
+export const organizationMembers = sqliteTable(
+  "organization_members",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id),
+    email: text("email").notNull(),
+    displayName: text("display_name").notNull(),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("invited"),
+    inviteToken: text("invite_token"),
+    invitedAt: text("invited_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    joinedAt: text("joined_at"),
+  },
+  (table) => [
+    index("organization_members_org_idx").on(table.organizationId),
+    index("organization_members_email_idx").on(table.email),
+  ],
+);
+
+export const localUsers = sqliteTable(
+  "local_users",
+  {
+    email: text("email").primaryKey(),
+    displayName: text("display_name").notNull(),
+    role: text("role").notNull().default("learner"),
+    status: text("status").notNull().default("active"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("local_users_status_idx").on(table.status)],
+);
+
+export const localSessions = sqliteTable(
+  "local_sessions",
+  {
+    id: text("id").primaryKey(),
+    userEmail: text("user_email").notNull().references(() => localUsers.email),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("local_sessions_user_idx").on(table.userEmail)],
+);
+
+export const cohortEnrollments = sqliteTable(
+  "cohort_enrollments",
+  {
+    id: text("id").primaryKey(),
+    cohortId: text("cohort_id").notNull().references(() => cohorts.id),
+    learnerEmail: text("learner_email").notNull(),
+    status: text("status").notNull().default("invited"),
+    currentLabId: text("current_lab_id").notNull().default("lab-01"),
+    invitedAt: text("invited_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    joinedAt: text("joined_at"),
+    completedAt: text("completed_at"),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("cohort_enrollments_cohort_idx").on(table.cohortId),
+    index("cohort_enrollments_learner_idx").on(table.learnerEmail),
+  ],
+);
+
+export const cohortSessions = sqliteTable(
+  "cohort_sessions",
+  {
+    id: text("id").primaryKey(),
+    cohortId: text("cohort_id").notNull().references(() => cohorts.id),
+    title: text("title").notNull(),
+    scheduledAt: text("scheduled_at").notNull(),
+    durationMinutes: integer("duration_minutes").notNull().default(60),
+    status: text("status").notNull().default("scheduled"),
+    agenda: text("agenda").notNull().default(""),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("cohort_sessions_cohort_idx").on(table.cohortId)],
+);
+
+export const cohortInterventions = sqliteTable(
+  "cohort_interventions",
+  {
+    id: text("id").primaryKey(),
+    cohortId: text("cohort_id").notNull().references(() => cohorts.id),
+    learnerEmail: text("learner_email").notNull(),
+    facilitatorEmail: text("facilitator_email").notNull(),
+    note: text("note").notNull(),
+    status: text("status").notNull().default("open"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [index("cohort_interventions_cohort_idx").on(table.cohortId)],
 );
 
 export const workflowBaselines = sqliteTable(

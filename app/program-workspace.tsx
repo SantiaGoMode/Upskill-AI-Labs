@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { curriculumLabs } from "./curriculum-data";
 import { CurriculumWorkspace } from "./curriculum-workspace";
 import { LabWorkspace } from "./lab-workspace";
 import type { PersistedAttempt } from "./lib/attempt-types";
 import { FacilitatorConsole } from "./facilitator-console";
 import { PhaseTwoConsole } from "./phase-two-console";
+import { AccountConsole } from "./account-console";
 
 export function ProgramWorkspace() {
   const [activeLab, setActiveLab] = useState("lab-01");
@@ -16,7 +17,17 @@ export function ProgramWorkspace() {
   const [workspaceKey, setWorkspaceKey] = useState(0);
   const [facilitatorOpen, setFacilitatorOpen] = useState(false);
   const [phaseTwoOpen, setPhaseTwoOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [inviteToken, setInviteToken] = useState("");
   const selected = curriculumLabs.find((lab) => lab.id === activeLab);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const token = new URLSearchParams(window.location.search).get("invite") ?? "";
+      if (token) { setInviteToken(token); setAccountOpen(true); }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function openHistory() {
     const response = await fetch("/api/attempts?history=1");
@@ -42,5 +53,5 @@ export function ProgramWorkspace() {
     setHistoryOpen(false);
   }
 
-  return <><nav className="curriculum-nav" id="curriculum" aria-label="Program curriculum"><div><span className="eyebrow">Curriculum</span><strong>Beacon program manager pathway</strong></div><div className="curriculum-tabs"><button type="button" className={activeLab === "lab-01" ? "active" : ""} onClick={() => setActiveLab("lab-01")}><span>01</span>Intake</button>{curriculumLabs.map((lab) => <button type="button" className={activeLab === lab.id ? "active" : ""} key={lab.id} onClick={() => setActiveLab(lab.id)}><span>{String(lab.number).padStart(2, "0")}</span>{lab.title.replace(/^(Write|Synthesize|Prepare|Red-team|Build and regression-test|Audit|Evaluate and promote) (the )?/, "")}</button>)}</div><button className="history-action phase2-action" type="button" onClick={() => setPhaseTwoOpen(true)}>Phase 2</button><button className="history-action" type="button" onClick={() => setFacilitatorOpen(true)}>Facilitator</button><button className="history-action" type="button" onClick={openHistory}>Attempt history</button></nav><PhaseTwoConsole open={phaseTwoOpen} onClose={() => setPhaseTwoOpen(false)} /><FacilitatorConsole open={facilitatorOpen} onClose={() => setFacilitatorOpen(false)} />{historyOpen && <div className="history-backdrop" role="presentation"><section className="history-panel" role="dialog" aria-modal="true" aria-labelledby="history-title"><header><div><span className="eyebrow">Learner record</span><h2 id="history-title">{learner || "Attempt history"}</h2></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header><div>{history.length ? history.map((attempt) => <button type="button" className="history-item" key={attempt.id} onClick={() => resumeAttempt(attempt)}><span><strong>{attempt.labId.replace("lab-", "Lab ")}</strong><small>{new Date(attempt.updatedAt).toLocaleString()}</small></span><b className={attempt.status}>{attempt.status.replace("_", " ")}</b></button>) : <p className="empty-history">No durable attempts yet. Begin a lab to create the first record.</p>}</div></section></div>}{selected ? <CurriculumWorkspace key={`${selected.id}-${workspaceKey}`} lab={selected} /> : <LabWorkspace key={`lab-01-${workspaceKey}`} />}</>;
+  return <><nav className="curriculum-nav" id="curriculum" aria-label="Program curriculum"><div><span className="eyebrow">Curriculum</span><strong>Beacon program manager pathway</strong></div><div className="curriculum-tabs"><button type="button" className={activeLab === "lab-01" ? "active" : ""} onClick={() => setActiveLab("lab-01")}><span>01</span>Intake</button>{curriculumLabs.map((lab) => <button type="button" className={activeLab === lab.id ? "active" : ""} key={lab.id} onClick={() => setActiveLab(lab.id)}><span>{String(lab.number).padStart(2, "0")}</span>{lab.title.replace(/^(Write|Synthesize|Prepare|Red-team|Build and regression-test|Audit|Evaluate and promote) (the )?/, "")}</button>)}</div><button className="history-action phase2-action" type="button" onClick={() => setPhaseTwoOpen(true)}>Phase 2</button><button className="history-action" type="button" onClick={() => setFacilitatorOpen(true)}>Facilitator</button><button className="history-action" type="button" onClick={openHistory}>Attempt history</button><button className="history-action" type="button" onClick={() => setAccountOpen(true)}>Account</button></nav><AccountConsole open={accountOpen} initialInvite={inviteToken} onClose={() => setAccountOpen(false)} /><PhaseTwoConsole open={phaseTwoOpen} onClose={() => setPhaseTwoOpen(false)} /><FacilitatorConsole open={facilitatorOpen} onClose={() => setFacilitatorOpen(false)} />{historyOpen && <div className="history-backdrop" role="presentation"><section className="history-panel" role="dialog" aria-modal="true" aria-labelledby="history-title"><header><div><span className="eyebrow">Learner record</span><h2 id="history-title">{learner || "Attempt history"}</h2></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header><div>{history.length ? history.map((attempt) => <button type="button" className="history-item" key={attempt.id} onClick={() => resumeAttempt(attempt)}><span><strong>{attempt.labId.replace("lab-", "Lab ")}</strong><small>{new Date(attempt.updatedAt).toLocaleString()}</small></span><b className={attempt.status}>{attempt.status.replace("_", " ")}</b></button>) : <p className="empty-history">No durable attempts yet. Begin a lab to create the first record.</p>}</div></section></div>}{selected ? <CurriculumWorkspace key={`${selected.id}-${workspaceKey}`} lab={selected} /> : <LabWorkspace key={`lab-01-${workspaceKey}`} />}</>;
 }

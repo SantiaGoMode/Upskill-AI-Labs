@@ -30,7 +30,7 @@ async function transferSummary() {
 
 export async function GET(request: Request) {
   await ensureLabSchema();
-  const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const [map] = await getDb().select().from(workflowMaps).where(eq(workflowMaps.ownerEmail, identity.email)).orderBy(desc(workflowMaps.updatedAt)).limit(1);
   const [instance] = await getDb().select().from(curriculumInstances).where(eq(curriculumInstances.ownerEmail, identity.email)).orderBy(desc(curriculumInstances.updatedAt)).limit(1);
   const [currentExperiment] = map ? await getDb().select().from(redactionExperiments).where(eq(redactionExperiments.workflowMapId, map.id)).orderBy(desc(redactionExperiments.createdAt)).limit(1) : [];
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await ensureLabSchema();
-    const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+    const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
     const body = await request.json() as Record<string, unknown>;
     if (body.action === "propose") {
       const tier = String(body.intakeTier ?? "T0") as IntakeTier;

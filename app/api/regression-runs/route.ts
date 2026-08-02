@@ -22,7 +22,7 @@ function addUsage(total: ModelUsage, next: ModelUsage) {
 
 export async function GET(request: Request) {
   await ensureLabSchema();
-  const identity = getRequestIdentity(request);
+  const identity = await getRequestIdentity(request);
   if (!identity) return unauthorizedResponse();
   const rows = await getDb().select().from(regressionRuns)
     .where(eq(regressionRuns.ownerEmail, identity.email)).orderBy(desc(regressionRuns.createdAt)).limit(10);
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await ensureLabSchema();
-    const identity = getRequestIdentity(request);
+    const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
     const body = await request.json() as { attemptId?: string; prompt?: string; provider?: ModelProvider; mode?: "preview" | "live" };
     const attemptId = body.attemptId?.trim() ?? "";

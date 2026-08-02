@@ -142,12 +142,59 @@ export function ensureLabSchema() {
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS curriculum_versions_status_idx ON curriculum_versions (status)"),
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohorts (
-        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, name TEXT NOT NULL,
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, organization_id TEXT, name TEXT NOT NULL,
         curriculum_version_id TEXT NOT NULL REFERENCES curriculum_versions(id),
         learner_emails_json TEXT DEFAULT '[]' NOT NULL, workflow_summary_json TEXT DEFAULT '{}' NOT NULL,
-        status TEXT DEFAULT 'draft' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+        status TEXT DEFAULT 'draft' NOT NULL, starts_at TEXT, ends_at TEXT, archived_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS cohorts_owner_email_idx ON cohorts (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL,
+        owner_email TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS organizations_owner_email_idx ON organizations (owner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS organization_members (
+        id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL REFERENCES organizations(id),
+        email TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL,
+        status TEXT DEFAULT 'invited' NOT NULL, invite_token TEXT,
+        invited_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, joined_at TEXT
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS organization_members_org_idx ON organization_members (organization_id)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS organization_members_email_idx ON organization_members (email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS local_users (
+        email TEXT PRIMARY KEY NOT NULL, display_name TEXT NOT NULL,
+        role TEXT DEFAULT 'learner' NOT NULL, status TEXT DEFAULT 'active' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS local_users_status_idx ON local_users (status)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS local_sessions (
+        id TEXT PRIMARY KEY NOT NULL, user_email TEXT NOT NULL REFERENCES local_users(email),
+        expires_at TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS local_sessions_user_idx ON local_sessions (user_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohort_enrollments (
+        id TEXT PRIMARY KEY NOT NULL, cohort_id TEXT NOT NULL REFERENCES cohorts(id),
+        learner_email TEXT NOT NULL, status TEXT DEFAULT 'invited' NOT NULL,
+        current_lab_id TEXT DEFAULT 'lab-01' NOT NULL, invited_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        joined_at TEXT, completed_at TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_enrollments_cohort_idx ON cohort_enrollments (cohort_id)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_enrollments_learner_idx ON cohort_enrollments (learner_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohort_sessions (
+        id TEXT PRIMARY KEY NOT NULL, cohort_id TEXT NOT NULL REFERENCES cohorts(id),
+        title TEXT NOT NULL, scheduled_at TEXT NOT NULL, duration_minutes INTEGER DEFAULT 60 NOT NULL,
+        status TEXT DEFAULT 'scheduled' NOT NULL, agenda TEXT DEFAULT '' NOT NULL,
+        created_by TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_sessions_cohort_idx ON cohort_sessions (cohort_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohort_interventions (
+        id TEXT PRIMARY KEY NOT NULL, cohort_id TEXT NOT NULL REFERENCES cohorts(id),
+        learner_email TEXT NOT NULL, facilitator_email TEXT NOT NULL, note TEXT NOT NULL,
+        status TEXT DEFAULT 'open' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        resolved_at TEXT
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_interventions_cohort_idx ON cohort_interventions (cohort_id)"),
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS workflow_baselines (
         id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, workflow_id TEXT NOT NULL,
         workflow_name TEXT NOT NULL, metric_name TEXT NOT NULL, unit TEXT NOT NULL,
@@ -180,6 +227,12 @@ export function ensureLabSchema() {
         await env.DB.prepare("ALTER TABLE lab_attempts ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'legacy-local@upskill.invalid'").run();
       }
       await env.DB.prepare("CREATE INDEX IF NOT EXISTS lab_attempts_owner_email_idx ON lab_attempts (owner_email)").run();
+      const cohortColumns = await env.DB.prepare("PRAGMA table_info(cohorts)").all<{ name: string }>();
+      const cohortColumnNames = new Set(cohortColumns.results.map((column) => column.name));
+      if (!cohortColumnNames.has("organization_id")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN organization_id TEXT").run();
+      if (!cohortColumnNames.has("starts_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN starts_at TEXT").run();
+      if (!cohortColumnNames.has("ends_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN ends_at TEXT").run();
+      if (!cohortColumnNames.has("archived_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN archived_at TEXT").run();
     })();
   }
 

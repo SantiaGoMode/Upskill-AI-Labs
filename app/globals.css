@@ -333,6 +333,34 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .claims-list { margin-top: 16px; }.claims-list article { padding: 11px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; }.claims-list strong, .claims-list small { display: block; }.claims-list strong { font-size: 10px; text-transform: capitalize; }.claims-list small { margin-top: 4px; color: var(--muted); font-size: 8px; }.claims-list b { align-self: start; padding: 5px; font-size: 7px; text-transform: uppercase; }.claims-list b.strong { background: #deece2; color: #28533f; }.claims-list b.capable { background: #f5ead2; color: #70531f; }.claims-list b.developing { background: #f8e3dc; color: #8b412d; }
 .remeasure { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }.remeasure > strong, .remeasure > small { display: block; }.remeasure > strong { font-size: 11px; }.remeasure > small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 
+.account-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgb(9 24 20 / 76%); }
+.account-console { width: min(460px, 100%); padding: 24px; background: var(--surface); box-shadow: 0 25px 80px rgb(0 0 0 / 30%); }
+.account-console > header { margin: -24px -24px 20px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.account-console h2 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
+.account-console > header button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: transparent; font-size: 22px; }
+.account-console > p { color: var(--muted); font-size: 10px; line-height: 1.6; }
+.account-console > label { margin: 12px 0; display: grid; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; }
+.account-console input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #cbd2cc; background: #fbfaf6; color: var(--ink); font-size: 11px; text-transform: none; letter-spacing: normal; }
+.account-current { padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; background: #edf2ee; }
+.account-current span { font-size: 10px; }.account-current b { color: #376755; font-size: 8px; text-transform: uppercase; }.account-current small { grid-column: 1 / -1; color: var(--muted); font-size: 8px; }
+.account-error { padding: 9px 11px; color: #8b412d; background: #f8e5de; font-size: 9px; line-height: 1.5; }
+.cohort-dashboard { display: grid; gap: 15px; }
+.cohort-dashboard > header { padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid var(--line); background: var(--surface); }
+.cohort-dashboard > header h3 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 22px; font-weight: 500; }
+.cohort-dashboard > header select { min-width: 260px; padding: 9px; border: 1px solid #cbd2cc; background: #fbfaf6; color: var(--ink); font-size: 10px; }
+.cohort-outcomes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cohort-outcomes > div { padding: 16px; display: grid; gap: 3px; border: 1px solid var(--line); border-left: 3px solid #5c8a79; background: var(--surface); }
+.cohort-outcomes strong { font-family: Georgia, serif; font-size: 24px; }.cohort-outcomes span { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
+.cohort-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.invite-link { padding: 9px; display: grid; gap: 4px; background: #edf2ee; font-size: 8px; }.invite-link code { overflow-wrap: anywhere; color: #376755; }
+.cohort-roster article { min-height: 52px; padding: 10px 0; display: grid; grid-template-columns: minmax(180px, 1fr) 1.5fr 45px 50px; gap: 12px; align-items: center; border-top: 1px solid var(--line); }
+.cohort-roster article strong, .cohort-roster article small { display: block; }.cohort-roster article strong { font-size: 9px; }.cohort-roster article small { margin-top: 4px; color: var(--muted); font-size: 8px; }.cohort-roster article > b { font-size: 9px; }.cohort-roster article > button { padding: 6px; border: 1px solid #aebbb2; background: transparent; color: var(--forest); font-size: 8px; }
+.roster-progress { height: 5px; background: #dfe5df; }.roster-progress i { display: block; height: 100%; background: var(--signal); }
+.intervention-form { margin-top: 14px; padding: 14px; background: #edf2ee; }.intervention-form label { display: grid; gap: 6px; color: var(--muted); font-size: 9px; }.intervention-form textarea { padding: 9px; border: 1px solid #cbd2cc; background: white; color: var(--ink); font-size: 10px; }
+.session-row { padding: 12px 0; display: flex; justify-content: space-between; gap: 14px; border-top: 1px solid var(--line); }.session-row strong, .session-row small { display: block; }.session-row strong { font-size: 10px; }.session-row small { margin-top: 4px; color: var(--muted); font-size: 8px; }.session-row > b { color: #376755; font-size: 8px; text-transform: uppercase; }
+.cohort-status-actions { margin-top: 15px; display: flex; gap: 7px; }.cohort-status-actions button { padding: 8px 10px; border: 1px solid #aebbb2; background: transparent; color: var(--forest); font-size: 8px; font-weight: 750; }
+.learner-progress { margin: 18px 0; padding: 18px; display: flex; align-items: baseline; gap: 10px; background: #edf2ee; }.learner-progress strong { font-family: Georgia, serif; font-size: 34px; }.learner-progress span { color: var(--muted); font-size: 9px; }
+
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 220px 1fr; }
   .workbench-panel { grid-column: 1 / -1; border-top: 1px solid var(--line); }
@@ -379,4 +407,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .phase2-grid { grid-template-columns: 1fr; }
   .route-list article { grid-template-columns: 25px 1fr; }
   .route-list b { grid-column: 2; justify-self: start; }
+  .account-backdrop { padding: 0; }.account-console { min-height: 100vh; }
+  .cohort-dashboard > header { align-items: stretch; flex-direction: column; }.cohort-dashboard > header select { min-width: 0; width: 100%; }
+  .cohort-outcomes { grid-template-columns: repeat(2, 1fr); }.cohort-columns { grid-template-columns: 1fr; }
+  .cohort-roster article { grid-template-columns: 1fr 50px; }.cohort-roster article .roster-progress { grid-column: 1 / -1; grid-row: 2; }.cohort-roster article > button { grid-column: 2; grid-row: 1; }
 }

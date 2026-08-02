@@ -50,3 +50,38 @@ test("Capability Ledger owns baselines and computes day-30 evidence eligibility"
   const foreign = await request.post("/api/capabilities", { headers: { "oai-authenticated-user-email": "other@example.com" }, data: { action: "measurement", baselineId: baseline.id, value: "10", reflection: "This should fail ownership checks." } });
   expect(foreign.status()).toBe(404);
 });
+
+test("trainer can invite a learner, schedule a cohort, and expose learner progress", async ({ request }) => {
+  const fork = await request.post("/api/trainer-studio", { data: { action: "fork", name: "Operational cohort pathway" } });
+  const version = (await fork.json()).version;
+  await request.post("/api/trainer-studio", { data: { action: "edit", id: version.id, content: version.content, changeSummary: "Prepare the reviewed pathway for an operational cohort." } });
+  await request.post("/api/trainer-studio", { data: { action: "submit-review", id: version.id } });
+  await request.post("/api/trainer-studio", { data: { action: "approve", id: version.id } });
+  await request.post("/api/trainer-studio", { data: { action: "publish", id: version.id } });
+  const created = await request.post("/api/trainer-studio", { data: { action: "create-cohort", name: "August program managers", curriculumVersionId: version.id, learnerEmails: ["cohort-learner@example.com", "private-peer@example.com"] } });
+  expect(created.status()).toBe(201);
+  const createdBody = await created.json();
+  const cohortId = createdBody.cohort.id as string;
+  const invitation = createdBody.invitations[0] as { token: string; joinPath: string };
+  expect(invitation.joinPath).toContain("?invite=");
+
+  const scheduled = await request.post("/api/cohorts", { data: { action: "schedule-session", cohortId, title: "Evidence workshop", scheduledAt: "2026-08-12T16:00:00.000Z", durationMinutes: 75, agenda: "Compare evidence-linked prompts." } });
+  expect(scheduled.status()).toBe(201);
+  const trainerView = await request.get("/api/cohorts");
+  const trainerCohort = (await trainerView.json()).cohorts.find((item: { id: string }) => item.id === cohortId);
+  expect(trainerCohort.learners).toHaveLength(2);
+  expect(trainerCohort.learners[0].status).toBe("invited");
+  expect(trainerCohort.sessions).toHaveLength(1);
+
+  const accepted = await request.post("/api/auth", { data: { action: "sign-in", inviteToken: invitation.token } });
+  expect(accepted.status()).toBe(201);
+  expect((await accepted.json()).identity.role).toBe("learner");
+  const learnerView = await request.get("/api/cohorts");
+  const learnerBody = await learnerView.json();
+  expect(learnerBody.identity.email).toBe("cohort-learner@example.com");
+  expect(learnerBody.cohorts[0].sessions[0].title).toBe("Evidence workshop");
+  expect(learnerBody.cohorts[0].learners).toHaveLength(1);
+  expect(JSON.stringify(learnerBody)).not.toContain("private-peer@example.com");
+  const denied = await request.post("/api/cohorts", { data: { action: "update-status", cohortId, status: "active" } });
+  expect(denied.status()).toBe(403);
+});

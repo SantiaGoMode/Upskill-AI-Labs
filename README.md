@@ -105,6 +105,8 @@ LOCAL_DEV_ROLE=facilitator
 
 Set `LOCAL_DEV_ROLE=learner` to exercise learner-only access. Attempts, histories, submissions, model runs, workflow maps, baselines, measurements, and claims are scoped to the authenticated email on the server.
 
+The Account panel can create a seven-day local session for the configured developer account. Trainers can also generate cohort invitation links. Opening an invitation locally activates the learner membership, enrolls the learner, and starts a learner-scoped session. This is an installation-local account flow; it is not intended to replace enterprise SSO on an exposed public runtime.
+
 For a non-local runtime, an authenticated reverse proxy must provide:
 
 - `oai-authenticated-user-email`
@@ -195,6 +197,17 @@ The primary API surfaces are:
 | `/api/trainer-studio` | Curriculum versions, review gates, publishing, and cohorts |
 | `/api/governance` | Versioned policies and audit evidence |
 | `/api/capabilities` | Claims, baselines, and workplace measurements |
+| `/api/auth` | Local account sessions and invitation acceptance |
+| `/api/cohorts` | Enrollment, progress, scheduled sessions, interventions, and outcomes |
+
+## Running a cohort locally
+
+1. Open **Phase 2 → Trainer Studio** and publish a reviewed curriculum version.
+2. Create a cohort from that published version.
+3. Open **Phase 2 → Cohorts** to invite learners and schedule sessions.
+4. Give each learner their local invitation link.
+5. Learners accept the invitation through the Account panel and receive a learner-scoped cohort view.
+6. Use the cohort roster to monitor submitted and passing labs, record intervention notes, and complete or archive the cohort.
 
 ## Testing
 

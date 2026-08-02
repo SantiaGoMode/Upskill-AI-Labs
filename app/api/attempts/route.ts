@@ -38,7 +38,7 @@ function errorResponse(error: unknown) {
 export async function GET(request: Request) {
   try {
     await ensureLabSchema();
-    const identity = getRequestIdentity(request);
+    const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
     const searchParams = new URL(request.url).searchParams;
     if (searchParams.get("history") === "1") {
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await ensureLabSchema();
-    const identity = getRequestIdentity(request);
+    const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
     const body = (await request.json()) as {
       action?: "start" | "save" | "submit";

@@ -13,7 +13,7 @@ const claimView = (row: typeof capabilityClaims.$inferSelect) => ({ ...row, evid
 const bandRank = { Developing: 0, Capable: 1, Strong: 2 } as const;
 
 export async function GET(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const claims = await getDb().select().from(capabilityClaims).where(eq(capabilityClaims.ownerEmail, identity.email)).orderBy(desc(capabilityClaims.updatedAt));
   const baselines = await getDb().select().from(workflowBaselines).where(eq(workflowBaselines.ownerEmail, identity.email)).orderBy(desc(workflowBaselines.createdAt));
   const measurements = await getDb().select().from(workflowMeasurements).where(eq(workflowMeasurements.ownerEmail, identity.email)).orderBy(desc(workflowMeasurements.measuredAt));
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const body = await request.json() as Record<string, unknown>; const action = String(body.action ?? "");
   if (action === "refresh-claims") {
     const rows = await getDb().select({ submissionId: labSubmissions.id, labId: labAttempts.labId, resultJson: evalResults.resultJson, submittedAt: labSubmissions.submittedAt })

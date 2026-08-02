@@ -6,6 +6,7 @@ import { curriculumLabs } from "../../curriculum-data";
 import { recordAudit } from "../../lib/governance";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 import type { WorkflowCandidate } from "../../lib/redaction";
+import { ensureFacilitatorOrganization, inviteCohortLearners } from "../../lib/cohort-operations";
 
 const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value) as T; } catch { return fallback; } };
 const canonicalContent = () => ({ assessedSpine: [{ id: "lab-01", title: "Intake and structure", play: "EXTRACT-STRUCTURE" }, ...curriculumLabs.map(({ id, title, play }) => ({ id, title, play }))], skinGuidance: "Use cohort workflow priorities without changing assessed outcomes or guardrails." });
@@ -27,7 +28,7 @@ async function workflowSummary() {
 }
 
 export async function GET(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   if (identity.role !== "facilitator") return facilitatorRequiredResponse();
   const versions = (await getDb().select().from(curriculumVersions).orderBy(desc(curriculumVersions.createdAt))).map(versionView);
   const cohortRows = (await getDb().select().from(cohorts).orderBy(desc(cohorts.createdAt))).map(cohortView);
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   if (identity.role !== "facilitator") return facilitatorRequiredResponse();
   const body = await request.json() as Record<string, unknown>; const action = String(body.action ?? "");
   if (action === "fork") {
@@ -83,9 +84,11 @@ export async function POST(request: Request) {
     if (!published || published.status !== "published") return Response.json({ error: "Choose a published curriculum version" }, { status: 409 });
     const learnerEmails = Array.isArray(body.learnerEmails) ? [...new Set(body.learnerEmails.map((item) => String(item).trim().toLowerCase()).filter((item) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(item)))] : [];
     const summary = await workflowSummary();
-    const [row] = await getDb().insert(cohorts).values({ id: crypto.randomUUID(), ownerEmail: identity.email, name: String(body.name ?? "New cohort").trim(), curriculumVersionId, learnerEmailsJson: JSON.stringify(learnerEmails), workflowSummaryJson: JSON.stringify(summary), status: "ready" }).returning();
+    const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);
+    const [row] = await getDb().insert(cohorts).values({ id: crypto.randomUUID(), ownerEmail: identity.email, organizationId: organization.id, name: String(body.name ?? "New cohort").trim(), curriculumVersionId, learnerEmailsJson: JSON.stringify(learnerEmails), workflowSummaryJson: JSON.stringify(summary), status: "ready" }).returning();
+    const invitations = await inviteCohortLearners(row.id, organization.id, learnerEmails);
     await recordAudit(identity.email, "cohort.created", "cohort", row.id, { learnerCount: learnerEmails.length, curriculumVersionId });
-    return Response.json({ cohort: cohortView(row) }, { status: 201 });
+    return Response.json({ cohort: cohortView(row), invitations: invitations.map((item) => ({ ...item, joinPath: `/?invite=${item.token}` })) }, { status: 201 });
   }
   return Response.json({ error: "Unsupported action" }, { status: 400 });
 }

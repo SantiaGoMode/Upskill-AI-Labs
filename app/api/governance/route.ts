@@ -6,7 +6,7 @@ import { activePolicy, defaultPolicy, providerIds, recordAudit, toPolicy } from 
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 
 export async function GET(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const policy = await activePolicy();
   if (identity.role !== "facilitator") return Response.json({ policy });
   const profiles = (await getDb().select().from(policyProfiles).orderBy(desc(policyProfiles.version))).map(toPolicy);
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await ensureLabSchema(); const identity = getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   if (identity.role !== "facilitator") return facilitatorRequiredResponse();
   const body = await request.json() as Record<string, unknown>;
   if (body.action !== "save" && body.action !== "activate") return Response.json({ error: "Unsupported action" }, { status: 400 });
