@@ -1,0 +1,16 @@
+# Cloudflare-compatible local bindings. Never commit the real keys.
+OPENAI_API_KEY=replace-with-a-project-api-key
+OPENAI_MODEL=gpt-5.6-sol
+
+GEMINI_API_KEY=replace-with-a-gemini-api-key
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+ANTHROPIC_API_KEY=replace-with-an-anthropic-api-key
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+
+# Ollama does not require a key. Keep the URL server-side.
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=gemma4
+
+# Local-only identity fallback. Hosted requests use the Sites auth header.
+LOCAL_DEV_USER_EMAIL=local-developer@upskill.invalid
