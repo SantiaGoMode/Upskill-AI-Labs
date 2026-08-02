@@ -8,14 +8,6 @@ theoretical AI knowledge to practical, day-to-day execution.
 > practice is real, the failures are safe, and the proof is an artifact rather than a
 > certificate.
 
-## Docs
-
-- [**Product Blueprint**](docs/PRODUCT-BLUEPRINT.md) — vision, personas, curriculum
-  architecture, the Lab, simulation layer, governance, Trainer Studio, Live Room &
-  Cognitive Whiteboard, Capability Ledger, business model, roadmap, tech appendix.
-- [**Phase 0 Pilot**](docs/phase-0/README.md) — the first role hypothesis, six manual labs,
-  facilitator runbook, evidence plan, and exit criteria.
-
 ## Core concepts
 
 | Concept | What it is |
