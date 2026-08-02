@@ -1,100 +1,214 @@
 # Upskill AI Labs
 
-Hands-on, enterprise-grade training environment designed to transition professionals from
-theoretical AI knowledge to practical, day-to-day execution.
+Upskill AI Labs is a local, hands-on learning application for practicing real workplace workflows with AI. Learners work inside a synthetic enterprise, produce evidence-linked artifacts, run them through deterministic and model-assisted evaluation, and retain proof of capability beyond course completion.
 
-> Most AI training teaches AI. Upskill AI Labs teaches **your job** — the workflow you
-> personally own, rebuilt with AI in the loop, inside a synthetic enterprise where the
-> practice is real, the failures are safe, and the proof is an artifact rather than a
-> certificate.
+The initial curriculum is designed for program managers. Its scenarios use Northwind, a fictional company with deliberately imperfect records, conflicting evidence, restricted data, and adversarial instructions.
 
-## Core concepts
+## What you can do
 
-| Concept | What it is |
-|---|---|
-| **The Atlas** | Role → Workflow → AI Play taxonomy. The content backbone. |
-| **AI Plays** | Reusable patterns (`DRAFT-FROM-EVIDENCE`, `BUILD-THE-JIG`, …) that are the atoms of curriculum. |
-| **The Lab** | Sandboxed workspace where learners do the real task and get graded on process, not prose. |
-| **Northwind** | One persistent synthetic enterprise with dirty, realistic data that every lab is set inside. |
-| **Recipe Engine** | Rigid spine, flexible skin — adaptive without becoming unpredictable. |
-| **Trainer Studio** | Curriculum-as-code: fork, diff, review, merge, promote. |
-| **Cognitive Whiteboard** | Infinite canvas where objects are live and executable, not ink. |
-| **Capability Ledger** | Evidence-backed, decaying, artifact-linked capability claims. |
+### Complete an eight-lab curriculum
 
-## Status
+The assessed pathway progresses from individual AI-assisted tasks to reusable and evaluated workflows:
 
-The Phase 1 application now includes interactive Labs 1–8, synthetic evidence packs, timeboxed artifact
-workspaces, durable D1-backed attempts, learner-owned history, and browser-local draft fallback.
-Its policy-bounded AI workbench supports Gemini, OpenAI, Anthropic, and local Ollama models. Each
-run stores and displays the output, provider trace, token usage, and estimated USD cost. Submitted
-artifacts receive a stored deterministic rubric result before human calibration.
+1. Structure an ambiguous intake request.
+2. Draft a weekly status from evidence.
+3. Synthesize a noisy risk picture.
+4. Prepare a decision with options and tradeoffs.
+5. Build an executable delivery plan.
+6. Turn a repeated process into a reusable jig.
+7. Audit an executive narrative against its sources.
+8. Regression-test and decide whether to promote a workflow.
 
-Northwind v1 provides 300 relational records and 40 synthetic documents with planted duplicate,
-stale-evidence, conflict, prompt-injection, and restricted-data failure modes. The Prompt Lab adds a
-20-case regression set with a zero-token preview and an explicitly confirmed live batch mode.
+Each lab includes a timeboxed workspace, an evidence pack, data-class controls, a prompt workbench, a structured deliverable, and a process-quality rubric.
 
-Facilitators can run a three-provider rubric-judge ensemble, record human calibration bands and
-rationales, resolve learner appeals, and monitor quadratic-weighted agreement per rubric dimension.
-Dimensions below the 0.75 agreement threshold are marked provisional. Saved human reviews become
-few-shot calibration anchors for later judge runs. Live batch and ensemble runs are never automatic.
+### Run multiple model providers
 
-Phase 2 is now available from the application navigation. Bring Your Own Job onboarding supports
-description-only T0 and client-side-redacted T1 intake. T1 sends only structural counts and markers;
-the API explicitly rejects raw artifact fields. Learners review nine proposed workflows, choose
-three priorities, and receive a visible adaptive route that preserves the common eight-lab assessed
-spine while varying scenario skin, pacing, and remediation.
+The workbench supports:
 
-Trainer Studio supports curriculum forks, draft edits, a required human review gate, publishing,
-cohort composition, and aggregate workflow-demand signals. The governance plane versions allowed
-BYOJ tiers, data classes, model providers, retention, prohibited uses, disclosures, and human-review
-rules; those rules now gate model execution and intake. Its actor-linked audit log starts the SOC 2
-evidence trail. The Capability Ledger creates evidence-linked, 180-day capability claims from
-assessed submissions and supports self-attested workflow baselines and day-30 remeasurement.
+- Google Gemini
+- OpenAI
+- Anthropic
+- Local Ollama
 
-## Run the app
+The application does not silently fall through to another provider. Each run records the selected provider and model, response identifier, duration, supplied source IDs, token usage, and estimated cost. Unknown pricing is shown as unmetered instead of being guessed.
 
-Requires Node.js 22.13 or newer.
+### Evaluate work, not writing style
+
+Submitted artifacts receive a deterministic evaluation across five dimensions:
+
+- Grounding
+- Completeness
+- Judgment
+- Efficiency
+- Guardrails
+
+Facilitators can add a three-provider rubric-judge ensemble, record human calibration, resolve appeals, and inspect judge-versus-human agreement. Model judging and live regression batches require an explicit action; they never run automatically.
+
+### Personalize the pathway safely
+
+Bring Your Own Job onboarding supports two usable intake modes:
+
+- `T0`: a role description only.
+- `T1`: a representative artifact is inspected in the browser and reduced to a structural profile before submission.
+
+T1 records counts such as lines, headings, list items, table dimensions, and the presence of date or email markers. Raw artifact text is not sent to the API, and the onboarding endpoint rejects raw-content fields. Full-artifact `T2` intake remains disabled until tenant-isolated storage is available.
+
+Learners review nine proposed workflows, correct the map, choose three priorities, and receive a personalized route. The recipe engine preserves the same assessed eight-lab spine while making scenario context, pacing, and remediation visible.
+
+### Manage curriculum and evidence
+
+Trainer Studio provides curriculum forks, draft editing, human review, publishing gates, and cohort composition. Draft material cannot contribute to capability claims before it is reviewed and published.
+
+The Capability Ledger creates evidence-linked claims from assessed submissions. Claims expire after 180 days. Workplace-transfer claims additionally require a recorded baseline and a measurement at least 30 days later.
+
+## Quick start
+
+Requirements:
+
+- Node.js 22.13 or newer
+- npm
+- At least one model provider key, or a local Ollama installation, for live model runs
+
+Install and start the local application:
 
 ```bash
 npm ci
+cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000`. Use `npm test`, `npm run lint`, and `npm run build` for validation.
-Use `npm run data:generate` to deterministically rebuild the Northwind v1 fixture corpus.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Configure model providers
+The app can be used without model credentials for browsing the curriculum, drafting artifacts, deterministic evaluation, regression previews, onboarding, governance configuration, and the Capability Ledger.
 
-Copy `.env.example` to `.env` for Vinext development, add only the providers you want to use,
-and restart the server. `.dev.vars.example` contains the equivalent Cloudflare bindings. API
-keys remain server-side and must never be committed or exposed to browser code.
+## Model configuration
 
-| Provider | Default model | Required setting |
+Add only the providers you intend to use to `.env`. Provider credentials are read by the server runtime and must never be exposed to browser code or committed to Git.
+
+| Provider | Default model | Configuration |
 |---|---|---|
-| Gemini | `gemini-3.5-flash-lite` | `GEMINI_API_KEY` |
-| OpenAI | `gpt-5.6-sol` | `OPENAI_API_KEY` |
-| Anthropic | `claude-haiku-4-5-20251001` | `ANTHROPIC_API_KEY` |
-| Ollama | `gemma4` | Local Ollama at `OLLAMA_BASE_URL` |
+| Gemini | `gemini-3.5-flash-lite` | `GEMINI_API_KEY`, optional `GEMINI_MODEL` |
+| OpenAI | `gpt-5.6-sol` | `OPENAI_API_KEY`, optional `OPENAI_MODEL` |
+| Anthropic | `claude-haiku-4-5-20251001` | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL` |
+| Ollama | `gemma4` | `OLLAMA_BASE_URL`, optional `OLLAMA_MODEL` |
 
-Gemini is the conservative testing default because eligible projects can use its free tier. The
-app limits each run to 600 output tokens and shows the paid-tier-equivalent estimate even when a
-run is free. Use synthetic training content only: Google states that free-tier content may be used
-to improve its products. The application never silently falls through to a paid provider.
+Gemini is the default testing provider and output is capped conservatively. The cost panel displays a paid-tier-equivalent estimate even when a project is eligible for free usage. OpenAI request storage is disabled. Ollama runs locally and is shown as having zero provider cost.
 
-The workbench sends only sources permitted by the selected lab and persists the provider response
-ID, model, duration, supplied source IDs, token usage, and estimated cost. OpenAI storage is
-disabled. An unknown model remains explicitly unmetered until its rate is added.
+## Local identity and roles
 
-## Local identity and ownership
+Local development uses the fallback identity configured in `.env`:
 
-Attempt reads, writes, submissions, histories, and model runs are scoped to a learner identity on
-the server. Local development uses `LOCAL_DEV_USER_EMAIL`. A trusted reverse proxy can supply the
-`oai-authenticated-user-email` header and may grant facilitator access with
-`oai-authenticated-user-role: facilitator`; non-local requests without an identity are rejected.
-Local development defaults to facilitator access and can be restricted with `LOCAL_DEV_ROLE=learner`.
+```dotenv
+LOCAL_DEV_USER_EMAIL=local-developer@upskill.invalid
+LOCAL_DEV_ROLE=facilitator
+```
 
-## Project page
+Set `LOCAL_DEV_ROLE=learner` to exercise learner-only access. Attempts, histories, submissions, model runs, workflow maps, baselines, measurements, and claims are scoped to the authenticated email on the server.
 
-The application itself runs locally. A separate static project page in `docs/` describes the
-product and is deployed to GitHub Pages by `.github/workflows/pages.yml`; it does not receive model
-keys or expose a live application runtime.
+For a non-local runtime, an authenticated reverse proxy must provide:
+
+- `oai-authenticated-user-email`
+- `oai-authenticated-user-full-name` when available
+- `oai-authenticated-user-role: facilitator` only for facilitator access
+
+These are trusted upstream identity headers, not values that should be accepted directly from an untrusted public client.
+
+## Data and persistence
+
+The application uses Drizzle ORM with a Cloudflare D1-compatible SQLite database. Local development receives a `DB` binding from the Cloudflare Vite plugin, and API routes initialize missing tables for a clean local checkout.
+
+Versioned SQL migrations live in [`drizzle/`](./drizzle), with the schema defined in [`db/schema.ts`](./db/schema.ts).
+
+Northwind v1 contains:
+
+- 300 relational records across customers, employees, contracts, tickets, financials, and messages
+- 40 synthetic documents
+- Duplicate records, stale evidence, numerical conflicts, prompt injection, and restricted-data cases
+
+All names, organizations, domains, events, and values in the fixture corpus are fictional. Rebuild it deterministically with:
+
+```bash
+npm run data:generate
+```
+
+## Governance boundaries
+
+The active governance policy controls:
+
+- Maximum BYOJ intake tier
+- Allowed data classes
+- Approved model providers
+- Prompt-retention period
+- Prohibited uses
+- AI disclosure rules
+- Mandatory human-review boundaries
+
+The same policy is enforced by onboarding and live model execution. Policy changes, curriculum review gates, cohort creation, workflow baselines, and measurements produce actor-linked audit events.
+
+Synthetic training content should be used for model experiments. Sources labeled Confidential or Regulated must not be sent unless an explicitly activated policy and an appropriate runtime support that data class. The default policy permits only Public and Internal data.
+
+## Development commands
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the local development server |
+| `npm run build` | Create a production build |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run unit, API, and browser-flow tests |
+| `npm run test:unit` | Run Vitest unit tests |
+| `npm run test:api` | Run Playwright API tests |
+| `npm run test:e2e` | Run Playwright Chromium flows |
+| `npm run db:generate` | Generate a migration from the Drizzle schema |
+| `npm run data:generate` | Rebuild the Northwind fixture corpus |
+
+## Application structure
+
+```text
+app/
+  api/                    Server routes for attempts, models, evaluation, and Phase 2
+  lib/                    Provider, pricing, evaluation, governance, and recipe logic
+  *-workspace.tsx         Learner workspaces
+  facilitator-console.tsx
+  phase-two-console.tsx
+db/
+  schema.ts               Drizzle table definitions
+  runtime.ts              Local D1 schema initialization
+data/northwind-v1/        Synthetic records and document corpus
+drizzle/                  Versioned SQL migrations
+tests/
+  unit/                   Pure logic and fixture tests
+  api/                    Ownership and API behavior tests
+  e2e/                    Chromium learner-flow tests
+worker/                   Vinext Cloudflare-compatible entry point
+docs/                     Static GitHub Pages project description
+```
+
+The primary API surfaces are:
+
+| Route | Responsibility |
+|---|---|
+| `/api/attempts` | Start, save, submit, resume, and list learner attempts |
+| `/api/model-runs` | Provider availability, governed execution, traces, usage, and cost |
+| `/api/evaluations` | Judge ensembles, facilitator calibration, agreement, and appeals |
+| `/api/regression-runs` | Preview and live 20-case regression batches |
+| `/api/onboarding` | BYOJ workflow mapping, pathway creation, and transfer experiment data |
+| `/api/trainer-studio` | Curriculum versions, review gates, publishing, and cohorts |
+| `/api/governance` | Versioned policies and audit evidence |
+| `/api/capabilities` | Claims, baselines, and workplace measurements |
+
+## Testing
+
+Run the complete validation suite before committing changes:
+
+```bash
+npm run lint
+npm run build
+npm test
+git diff --check
+```
+
+API and browser tests start the application on port `3100` and use a local D1 database. Live provider calls are not required by the automated suite.
+
+## Project website
+
+The application runs locally. [`docs/`](./docs) contains a separate static description of the project for GitHub Pages; it does not contain a live application runtime or receive provider credentials.
