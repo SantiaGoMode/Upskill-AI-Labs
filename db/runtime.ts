@@ -188,6 +188,28 @@ export function ensureLabSchema() {
         created_by TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_sessions_cohort_idx ON cohort_sessions (cohort_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS live_rooms (
+        id TEXT PRIMARY KEY NOT NULL, session_id TEXT NOT NULL REFERENCES cohort_sessions(id),
+        status TEXT DEFAULT 'open' NOT NULL, current_lab_id TEXT DEFAULT 'lab-01' NOT NULL,
+        current_section TEXT DEFAULT 'Welcome and objectives' NOT NULL, shared_prompt TEXT DEFAULT '' NOT NULL,
+        opened_by TEXT NOT NULL, opened_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, closed_at TEXT
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS live_rooms_session_idx ON live_rooms (session_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS live_room_participants (
+        id TEXT PRIMARY KEY NOT NULL, room_id TEXT NOT NULL REFERENCES live_rooms(id),
+        user_email TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL,
+        status TEXT DEFAULT 'present' NOT NULL, joined_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL, left_at TEXT
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS live_room_participants_room_idx ON live_room_participants (room_id)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS live_room_participants_user_idx ON live_room_participants (user_email)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS live_room_board_cards (
+        id TEXT PRIMARY KEY NOT NULL, room_id TEXT NOT NULL REFERENCES live_rooms(id),
+        section_key TEXT NOT NULL, author_email TEXT NOT NULL, body TEXT NOT NULL,
+        color TEXT DEFAULT 'blue' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS live_room_board_cards_room_idx ON live_room_board_cards (room_id)"),
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohort_interventions (
         id TEXT PRIMARY KEY NOT NULL, cohort_id TEXT NOT NULL REFERENCES cohorts(id),
         learner_email TEXT NOT NULL, facilitator_email TEXT NOT NULL, note TEXT NOT NULL,

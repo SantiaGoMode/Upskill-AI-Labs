@@ -59,6 +59,8 @@ Learners review nine proposed workflows, correct the map, choose three prioritie
 
 Trainer Studio provides curriculum forks, draft editing, human review, publishing gates, and cohort composition. Draft material cannot contribute to capability claims before it is reviewed and published.
 
+Scheduled cohort sessions include a shared Live Room. The facilitator controls progression through the eight lessons, broadcasts the prompt currently under discussion, monitors participant presence, and can clear each lesson's collaborative whiteboard. Enrolled learners follow the active section and contribute notes without receiving peer email addresses.
+
 The Capability Ledger creates evidence-linked claims from assessed submissions. Claims expire after 180 days. Workplace-transfer claims additionally require a recorded baseline and a measurement at least 30 days later.
 
 ## Quick start
@@ -199,6 +201,7 @@ The primary API surfaces are:
 | `/api/capabilities` | Claims, baselines, and workplace measurements |
 | `/api/auth` | Local account sessions and invitation acceptance |
 | `/api/cohorts` | Enrollment, progress, scheduled sessions, interventions, and outcomes |
+| `/api/live-room` | Session access, lesson progression, presence, shared prompts, and whiteboard notes |
 
 ## Running a cohort locally
 
@@ -207,7 +210,8 @@ The primary API surfaces are:
 3. Open **Phase 2 → Cohorts** to invite learners and schedule sessions.
 4. Give each learner their local invitation link.
 5. Learners accept the invitation through the Account panel and receive a learner-scoped cohort view.
-6. Use the cohort roster to monitor submitted and passing labs, record intervention notes, and complete or archive the cohort.
+6. Open a scheduled session's **Live Room**. The trainer opens the room, controls the active lesson, shares prompts, and facilitates the section whiteboard.
+7. Use the cohort roster to monitor submitted and passing labs, record intervention notes, and complete or archive the cohort.
 
 ## Testing
 

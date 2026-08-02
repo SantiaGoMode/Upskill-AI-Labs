@@ -51,7 +51,7 @@ test("Capability Ledger owns baselines and computes day-30 evidence eligibility"
   expect(foreign.status()).toBe(404);
 });
 
-test("trainer can invite a learner, schedule a cohort, and expose learner progress", async ({ request }) => {
+test("trainer can run a private, shared Live Room for an enrolled learner", async ({ request }) => {
   const fork = await request.post("/api/trainer-studio", { data: { action: "fork", name: "Operational cohort pathway" } });
   const version = (await fork.json()).version;
   await request.post("/api/trainer-studio", { data: { action: "edit", id: version.id, content: version.content, changeSummary: "Prepare the reviewed pathway for an operational cohort." } });
@@ -67,6 +67,15 @@ test("trainer can invite a learner, schedule a cohort, and expose learner progre
 
   const scheduled = await request.post("/api/cohorts", { data: { action: "schedule-session", cohortId, title: "Evidence workshop", scheduledAt: "2026-08-12T16:00:00.000Z", durationMinutes: 75, agenda: "Compare evidence-linked prompts." } });
   expect(scheduled.status()).toBe(201);
+  const sessionId = (await scheduled.json()).session.id as string;
+  const opened = await request.post("/api/live-room", { data: { action: "open-room", sessionId } });
+  expect(opened.status()).toBe(201);
+  expect((await opened.json()).room.currentLabId).toBe("lab-01");
+  const progressed = await request.post("/api/live-room", { data: { action: "set-section", sessionId, labId: "lab-02", section: "Evidence-grounded writing" } });
+  expect(progressed.status()).toBe(200);
+  const shared = await request.post("/api/live-room", { data: { action: "share-prompt", sessionId, prompt: "Draft a decision-ready summary grounded only in the supplied evidence." } });
+  expect(shared.status()).toBe(200);
+  await request.post("/api/live-room", { data: { action: "add-card", sessionId, body: "Name uncertainty explicitly.", color: "yellow" } });
   const trainerView = await request.get("/api/cohorts");
   const trainerCohort = (await trainerView.json()).cohorts.find((item: { id: string }) => item.id === cohortId);
   expect(trainerCohort.learners).toHaveLength(2);
@@ -82,6 +91,17 @@ test("trainer can invite a learner, schedule a cohort, and expose learner progre
   expect(learnerBody.cohorts[0].sessions[0].title).toBe("Evidence workshop");
   expect(learnerBody.cohorts[0].learners).toHaveLength(1);
   expect(JSON.stringify(learnerBody)).not.toContain("private-peer@example.com");
+  const joined = await request.post("/api/live-room", { data: { action: "join", sessionId } });
+  expect(joined.status()).toBe(200);
+  const learnerRoom = await joined.json();
+  expect(learnerRoom.room.currentLabId).toBe("lab-02");
+  expect(learnerRoom.room.sharedPrompt).toContain("decision-ready summary");
+  expect(learnerRoom.cards[0].body).toBe("Name uncertainty explicitly.");
+  expect(JSON.stringify(learnerRoom)).not.toContain("private-peer@example.com");
+  const learnerCard = await request.post("/api/live-room", { data: { action: "add-card", sessionId, body: "Which source resolves the timeline conflict?", color: "blue" } });
+  expect(learnerCard.status()).toBe(200);
+  const deniedProgression = await request.post("/api/live-room", { data: { action: "set-section", sessionId, labId: "lab-03", section: "Synthesis" } });
+  expect(deniedProgression.status()).toBe(403);
   const denied = await request.post("/api/cohorts", { data: { action: "update-status", cohortId, status: "active" } });
   expect(denied.status()).toBe(403);
 });

@@ -331,6 +331,56 @@ export const cohortSessions = sqliteTable(
   (table) => [index("cohort_sessions_cohort_idx").on(table.cohortId)],
 );
 
+export const liveRooms = sqliteTable(
+  "live_rooms",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull().references(() => cohortSessions.id),
+    status: text("status").notNull().default("open"),
+    currentLabId: text("current_lab_id").notNull().default("lab-01"),
+    currentSection: text("current_section").notNull().default("Welcome and objectives"),
+    sharedPrompt: text("shared_prompt").notNull().default(""),
+    openedBy: text("opened_by").notNull(),
+    openedAt: text("opened_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    closedAt: text("closed_at"),
+  },
+  (table) => [index("live_rooms_session_idx").on(table.sessionId)],
+);
+
+export const liveRoomParticipants = sqliteTable(
+  "live_room_participants",
+  {
+    id: text("id").primaryKey(),
+    roomId: text("room_id").notNull().references(() => liveRooms.id),
+    userEmail: text("user_email").notNull(),
+    displayName: text("display_name").notNull(),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("present"),
+    joinedAt: text("joined_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    leftAt: text("left_at"),
+  },
+  (table) => [
+    index("live_room_participants_room_idx").on(table.roomId),
+    index("live_room_participants_user_idx").on(table.userEmail),
+  ],
+);
+
+export const liveRoomBoardCards = sqliteTable(
+  "live_room_board_cards",
+  {
+    id: text("id").primaryKey(),
+    roomId: text("room_id").notNull().references(() => liveRooms.id),
+    sectionKey: text("section_key").notNull(),
+    authorEmail: text("author_email").notNull(),
+    body: text("body").notNull(),
+    color: text("color").notNull().default("blue"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("live_room_board_cards_room_idx").on(table.roomId)],
+);
+
 export const cohortInterventions = sqliteTable(
   "cohort_interventions",
   {
