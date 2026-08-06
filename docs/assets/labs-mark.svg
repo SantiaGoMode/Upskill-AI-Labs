@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Upskill AI Labs</title>
-  <rect width="64" height="64" rx="16" fill="#43203d"/>
-  <path d="M20 16v22c0 8 4.8 12 12 12s12-4 12-12V16h-7v21c0 4.4-1.7 6.4-5 6.4s-5-2-5-6.4V16z" fill="#f9f7f4"/>
-  <circle cx="47" cy="17" r="5" fill="#d9a63f"/>
+  <rect width="64" height="64" rx="16" fill="#152f2a"/>
+  <path d="M20 16v22c0 8 4.8 12 12 12s12-4 12-12V16h-7v21c0 4.4-1.7 6.4-5 6.4s-5-2-5-6.4V16z" fill="#fffefa"/>
+  <circle cx="47" cy="17" r="5" fill="#d6a85a"/>
 </svg>
