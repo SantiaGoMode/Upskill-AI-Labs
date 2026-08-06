@@ -186,11 +186,14 @@ main { overflow: hidden; }
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
 }
 .use-case.featured { grid-row: span 2; background: var(--forest); color: var(--on-dark); border-color: var(--forest); }
-.use-number { color: var(--subtle); font: 700 11px "Manrope", sans-serif; letter-spacing: .1em; }
-.use-case.featured .use-number { color: var(--mint); }
+/* The icon is the card's only marker — no number sits above it. */
 .use-icon {
-  width: 34px; height: 34px; margin: 18px 0 auto; display: grid; place-items: center;
-  color: var(--forest-2); background: var(--inset); border-radius: 9px; font-size: 15px;
+  width: 38px; height: 38px; margin: 0 0 auto; display: grid; place-items: center;
+  color: var(--forest-2); background: var(--inset); border-radius: 10px;
+}
+.use-icon svg {
+  width: 19px; height: 19px; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
 .use-case.featured .use-icon { color: var(--forest); background: var(--mint); }
 .use-case h3 { margin: 22px 0 8px; font-size: 19px; }
