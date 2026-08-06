@@ -4,6 +4,8 @@ import { ensureLabSchema } from "../../../db/runtime";
 import { evalResults, labAttempts, labSubmissions } from "../../../db/schema";
 import type { AttemptPayload, PersistedAttempt } from "../../lib/attempt-types";
 import { evaluateCurriculumLab, evaluateLabOne } from "../../lib/evaluator";
+import { serverErrorResponse } from "../../lib/observability";
+import { boundedAttemptPayload, boundedText, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 
 function parseJson<T>(value: string, fallback: T): T {
@@ -31,8 +33,7 @@ function toAttempt(row: typeof labAttempts.$inferSelect): PersistedAttempt {
 }
 
 function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unexpected attempt storage error";
-  return Response.json({ error: message }, { status: 500 });
+  return serverErrorResponse("attempts", error, "Your work could not be saved. Try again in a moment.");
 }
 
 export async function GET(request: Request) {
@@ -79,16 +80,18 @@ export async function POST(request: Request) {
     await ensureLabSchema();
     const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
-    const body = (await request.json()) as {
+    const parsed = await readJsonBody<{
       action?: "start" | "save" | "submit";
       id?: string;
       labId?: string;
       payload?: AttemptPayload;
-    };
+    }>(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (body.action === "start") {
       const id = crypto.randomUUID();
-      const labId = body.labId?.trim() || "lab-01";
+      const labId = boundedText(body.labId, 40).trim() || "lab-01";
       const [row] = await getDb().insert(labAttempts).values({ id, labId, ownerEmail: identity.email }).returning();
       return Response.json({ attempt: toAttempt(row) }, { status: 201 });
     }
@@ -98,7 +101,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "id and payload are required" }, { status: 400 });
       }
 
-      const payload = body.payload;
+      const payload = boundedAttemptPayload(body.payload);
       const [row] = await getDb()
         .update(labAttempts)
         .set({
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
           prompt: payload.prompt,
           selectedSourcesJson: JSON.stringify(payload.selectedSources),
           verification: payload.verification,
-          secondsRemaining: Math.max(0, Math.min(1500, Math.round(payload.secondsRemaining))),
+          secondsRemaining: payload.secondsRemaining,
           updatedAt: new Date().toISOString(),
         })
         .where(and(eq(labAttempts.id, body.id), eq(labAttempts.ownerEmail, identity.email)))
@@ -126,14 +129,17 @@ export async function POST(request: Request) {
         .where(and(eq(labAttempts.id, body.id), eq(labAttempts.ownerEmail, identity.email))).limit(1);
       if (!attempt) return Response.json({ error: "Attempt not found" }, { status: 404 });
 
+      // Bounded before it is graded as well as before it is stored, so the
+      // evaluated artifact is exactly the one the submission record holds.
+      const payload = boundedAttemptPayload(body.payload);
       const result = attempt.labId === "lab-01"
-        ? evaluateLabOne(body.payload)
-        : evaluateCurriculumLab(attempt.labId, body.payload);
+        ? evaluateLabOne(payload)
+        : evaluateCurriculumLab(attempt.labId, payload);
       const submissionId = crypto.randomUUID();
       await db.insert(labSubmissions).values({
         id: submissionId,
         attemptId: body.id,
-        payloadJson: JSON.stringify(body.payload),
+        payloadJson: JSON.stringify(payload),
       });
       await db.insert(evalResults).values({
         id: crypto.randomUUID(),
@@ -144,11 +150,11 @@ export async function POST(request: Request) {
       });
       await db.update(labAttempts).set({
         status: "submitted",
-        draftJson: JSON.stringify(body.payload.draft),
-        prompt: body.payload.prompt,
-        selectedSourcesJson: JSON.stringify(body.payload.selectedSources),
-        verification: body.payload.verification,
-        secondsRemaining: body.payload.secondsRemaining,
+        draftJson: JSON.stringify(payload.draft),
+        prompt: payload.prompt,
+        selectedSourcesJson: JSON.stringify(payload.selectedSources),
+        verification: payload.verification,
+        secondsRemaining: payload.secondsRemaining,
         updatedAt: new Date().toISOString(),
       }).where(and(eq(labAttempts.id, body.id), eq(labAttempts.ownerEmail, identity.email)));
 

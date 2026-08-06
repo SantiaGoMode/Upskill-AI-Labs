@@ -22,7 +22,7 @@ export type Policy = {
 
 export const defaultPolicy: Policy = {
   id: "builtin-phase2-default",
-  name: "Phase 2 safe local default",
+  name: "Safe local default",
   version: 1,
   status: "active",
   allowedIntakeTier: "T1",

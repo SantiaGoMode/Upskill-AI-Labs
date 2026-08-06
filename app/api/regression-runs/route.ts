@@ -3,9 +3,13 @@ import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { labAttempts, regressionRuns } from "../../../db/schema";
 import { estimateModelCost } from "../../lib/model-pricing";
+import { assertModelBudget, budgetErrorResponse, ModelBudgetError, recordModelUsage } from "../../lib/model-budget";
+import { activePolicy, permitsProvider } from "../../lib/governance";
 import { executeModelProvider, ProviderError } from "../../lib/model-providers";
-import type { ModelCost, ModelProvider, ModelUsage } from "../../lib/model-run-types";
+import { isModelProvider, type ModelCost, type ModelProvider, type ModelUsage } from "../../lib/model-run-types";
 import { beaconRegressionSet, evaluateRegressionOutput, promptReadinessForCase } from "../../lib/regression-set";
+import { serverErrorResponse } from "../../lib/observability";
+import { MAX_PROMPT_CHARS, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 
 function zeroUsage(): ModelUsage {
@@ -34,15 +38,33 @@ export async function POST(request: Request) {
     await ensureLabSchema();
     const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
-    const body = await request.json() as { attemptId?: string; prompt?: string; provider?: ModelProvider; mode?: "preview" | "live" };
+    const parsed = await readJsonBody<{ attemptId?: string; prompt?: string; provider?: ModelProvider; mode?: "preview" | "live" }>(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const attemptId = body.attemptId?.trim() ?? "";
     const prompt = body.prompt?.trim() ?? "";
     const provider = body.provider ?? "gemini";
     const mode = body.mode === "live" ? "live" : "preview";
     if (!attemptId || !prompt) return Response.json({ error: "attemptId and prompt are required" }, { status: 400 });
+    // A live batch sends this prompt once per case, so its size is multiplied by
+    // twenty before it reaches a provider.
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return Response.json({ error: `A prompt may be at most ${MAX_PROMPT_CHARS.toLocaleString()} characters` }, { status: 413 });
+    }
+    if (!isModelProvider(provider)) return Response.json({ error: "Unsupported model provider" }, { status: 400 });
     const [attempt] = await getDb().select({ id: labAttempts.id, labId: labAttempts.labId }).from(labAttempts)
       .where(and(eq(labAttempts.id, attemptId), eq(labAttempts.ownerEmail, identity.email))).limit(1);
     if (!attempt) return Response.json({ error: "Attempt not found" }, { status: 404 });
+
+    // A live batch is one provider call per case; a preview never leaves the app,
+    // which is also why only a live run is subject to the policy's approved list.
+    if (mode === "live") {
+      const policy = await activePolicy();
+      if (!permitsProvider(policy, provider)) {
+        return Response.json({ error: `${provider} is not approved by the active governance policy` }, { status: 403 });
+      }
+      await assertModelBudget(identity.email, beaconRegressionSet.cases.length);
+    }
 
     const usage = zeroUsage();
     let estimatedUsd = 0;
@@ -62,7 +84,9 @@ export async function POST(request: Request) {
       });
       const evaluation = evaluateRegressionOutput(testCase, modelResult.outputText);
       addUsage(usage, modelResult.usage);
-      estimatedUsd += estimateModelCost(provider, modelResult.model, modelResult.usage).estimatedUsd ?? 0;
+      const caseCost = estimateModelCost(provider, modelResult.model, modelResult.usage);
+      await recordModelUsage({ ownerEmail: identity.email, purpose: "regression", provider, model: modelResult.model, usage: modelResult.usage, cost: caseCost });
+      estimatedUsd += caseCost.estimatedUsd ?? 0;
       results.push({ caseId: testCase.id, category: testCase.category, ...evaluation, output: modelResult.outputText });
     }
     const passed = results.filter((result) => result.passed).length;
@@ -75,7 +99,8 @@ export async function POST(request: Request) {
     }).returning();
     return Response.json({ run: { ...row, result, usage, cost } }, { status: 201 });
   } catch (error) {
+    if (error instanceof ModelBudgetError) return budgetErrorResponse(error);
     if (error instanceof ProviderError) return Response.json({ code: error.code, error: error.message }, { status: error.status });
-    return Response.json({ error: error instanceof Error ? error.message : "Regression run failed" }, { status: 500 });
+    return serverErrorResponse("regression-runs", error, "The regression run could not be completed.");
   }
 }

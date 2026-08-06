@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const labAttempts = sqliteTable(
   "lab_attempts",
@@ -326,11 +326,19 @@ export const cohortSessions = sqliteTable(
     status: text("status").notNull().default("scheduled"),
     agenda: text("agenda").notNull().default(""),
     createdBy: text("created_by").notNull(),
+    /** Google Meet join URL. Set by the Meet REST API, or pasted by the facilitator. */
+    meetingUri: text("meeting_uri"),
+    /** Meet space resource name, e.g. spaces/abc123 — needed to read conference records. */
+    meetingSpace: text("meeting_space"),
+    meetingCode: text("meeting_code"),
+    /** "api" when created through the Meet REST API, "manual" when pasted. */
+    meetingSource: text("meeting_source"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("cohort_sessions_cohort_idx").on(table.cohortId)],
 );
 
+/** Meet fields live on the session, not the room: a session has one meeting. */
 export const liveRooms = sqliteTable(
   "live_rooms",
   {
@@ -367,6 +375,7 @@ export const liveRoomParticipants = sqliteTable(
   ],
 );
 
+/** Objects on the shared canvas: sticky notes, prompt cards, artifact refs and ink. */
 export const liveRoomBoardCards = sqliteTable(
   "live_room_board_cards",
   {
@@ -376,7 +385,16 @@ export const liveRoomBoardCards = sqliteTable(
     authorEmail: text("author_email").notNull(),
     body: text("body").notNull(),
     color: text("color").notNull().default("blue"),
+    /** note | prompt | artifact | text | ink */
+    kind: text("kind").notNull().default("note"),
+    x: integer("x").notNull().default(40),
+    y: integer("y").notNull().default(40),
+    width: integer("width").notNull().default(220),
+    height: integer("height").notNull().default(140),
+    /** Kind-specific JSON: ink point arrays, artifact source IDs, run metadata. */
+    payload: text("payload").notNull().default("{}"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("live_room_board_cards_room_idx").on(table.roomId)],
 );
@@ -458,4 +476,46 @@ export const auditEvents = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [index("audit_events_entity_idx").on(table.entityType, table.entityId)],
+);
+
+/**
+ * One row per governed provider call, whoever triggered it and for whatever
+ * purpose. Rate limits and daily spend ceilings are computed from this table, so
+ * every path that reaches a provider has to record here.
+ */
+export const modelUsageEvents = sqliteTable(
+  "model_usage_events",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    /** workbench, judge, regression, or live-room. */
+    purpose: text("purpose").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    /** Null when the model has no published pricing. */
+    estimatedUsd: real("estimated_usd"),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("model_usage_events_owner_idx").on(table.ownerEmail, table.createdAt)],
+);
+
+export const lessonProgress = sqliteTable(
+  "lesson_progress",
+  {
+    id: text("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull(),
+    moduleId: text("module_id").notNull(),
+    lessonId: text("lesson_id").notNull(),
+    status: text("status").notNull().default("completed"),
+    /** Populated for knowledge checks; null for reading lessons. */
+    score: integer("score"),
+    total: integer("total"),
+    completedAt: text("completed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("lesson_progress_owner_idx").on(table.ownerEmail),
+    index("lesson_progress_lesson_idx").on(table.ownerEmail, table.lessonId),
+  ],
 );

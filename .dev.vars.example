@@ -12,6 +12,19 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=gemma4
 
-# Local identity fallback. A trusted reverse proxy may supply authenticated-user headers.
+# Local identity fallback. Applies only to a local checkout.
 LOCAL_DEV_USER_EMAIL=local-developer@upskill.invalid
 LOCAL_DEV_ROLE=facilitator
+
+# Identity and session secrets. Leave empty locally; set both in a deployed
+# runtime with `wrangler secret put`.
+TRUSTED_PROXY_SECRET=
+SESSION_SECRET=
+
+# Per-learner model execution ceilings. Unset keeps the default; 0 disables.
+MODEL_DAILY_USD_CAP=5
+MODEL_RATE_LIMIT_PER_MINUTE=30
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=

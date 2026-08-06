@@ -1,7 +1,12 @@
-import type { IntakeDraft } from "../lab-data";
+/**
+ * Deliverable fields keyed by the lab's own field ids. Lab 1 uses `IntakeDraft`
+ * from `lab-data`; labs 2 to 8 each define a different field set, and drafts are
+ * rehydrated from stored JSON, so the shared payload type stays open.
+ */
+export type AttemptDraft = Record<string, string>;
 
 export type AttemptPayload = {
-  draft: IntakeDraft;
+  draft: AttemptDraft;
   prompt: string;
   selectedSources: string[];
   verification: string;

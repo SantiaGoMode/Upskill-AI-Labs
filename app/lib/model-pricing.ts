@@ -13,8 +13,8 @@ const PROVIDER_RATES: Partial<Record<ModelProvider, Record<string, [number, numb
     "gemini-3.1-flash-lite": [0.25, 1.5],
   },
   anthropic: {
-    "claude-haiku-4-5-20251001": [0.5, 2.5],
-    "claude-haiku-4-5": [0.5, 2.5],
+    "claude-haiku-4-5-20251001": [1, 5],
+    "claude-haiku-4-5": [1, 5],
   },
 };
 

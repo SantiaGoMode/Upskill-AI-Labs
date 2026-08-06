@@ -23,12 +23,79 @@ export type ProviderRequest = {
 
 export class ProviderError extends Error {
   constructor(
-    public code: "MODEL_NOT_CONFIGURED" | "MODEL_REQUEST_FAILED" | "MODEL_OUTPUT_EMPTY",
+    public code:
+      | "MODEL_NOT_CONFIGURED"
+      | "MODEL_REQUEST_FAILED"
+      | "MODEL_OUTPUT_EMPTY"
+      | "MODEL_REQUEST_TIMEOUT",
     message: string,
     public status = 502,
   ) {
     super(message);
   }
+}
+
+/** A hung provider must not hold a worker open indefinitely. */
+const REQUEST_TIMEOUT_MS = 30_000;
+/** Ollama runs on the learner's own machine and can be slower to first token. */
+const LOCAL_REQUEST_TIMEOUT_MS = 60_000;
+const MAX_ATTEMPTS = 3;
+
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
+function retryDelayMs(response: Response, attempt: number) {
+  const header = response.headers.get("retry-after");
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds)) return Math.min(seconds * 1000, 10_000);
+    const date = Date.parse(header);
+    if (Number.isFinite(date)) return Math.min(Math.max(date - Date.now(), 0), 10_000);
+  }
+  // 500ms, then 1s. Deliberately short: a learner is waiting on this response.
+  return 500 * 2 ** attempt;
+}
+
+const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+/**
+ * Issues a provider request with a timeout, retrying only on transport failures
+ * and statuses that indicate the request was never processed.
+ */
+async function requestWithRetry(
+  provider: string,
+  url: string,
+  init: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (cause) {
+      const timedOut = cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError");
+      if (attempt === MAX_ATTEMPTS - 1) {
+        if (timedOut) {
+          throw new ProviderError(
+            "MODEL_REQUEST_TIMEOUT",
+            `${provider} did not respond within ${Math.round(timeoutMs / 1000)} seconds.`,
+            504,
+          );
+        }
+        throw new ProviderError("MODEL_REQUEST_FAILED", `${provider} could not be reached.`);
+      }
+      await wait(500 * 2 ** attempt);
+      continue;
+    }
+
+    if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_ATTEMPTS - 1) return response;
+    lastResponse = response;
+    await wait(retryDelayMs(response, attempt));
+  }
+
+  // Unreachable in practice: the loop returns or throws on its final attempt.
+  return lastResponse ?? new Response(null, { status: 502 });
 }
 
 function runtimeValue(name: string) {
@@ -89,7 +156,9 @@ export async function executeModelProvider(provider: ModelProvider, request: Pro
   if (provider === "gemini") return executeGemini(request);
   if (provider === "anthropic") return executeAnthropic(request);
   if (provider === "ollama") return executeOllama(request);
-  return executeOpenAI(request);
+  if (provider === "openai") return executeOpenAI(request);
+  // Never silently substitute a provider: the run record must name what actually ran.
+  throw new ProviderError("MODEL_NOT_CONFIGURED", `${String(provider)} is not a supported model provider.`, 400);
 }
 
 async function parseProviderResponse<T>(response: Response, provider: string): Promise<T> {
@@ -111,7 +180,7 @@ async function executeGemini(request: ProviderRequest): Promise<ProviderResult> 
   const apiKey = runtimeValue("GEMINI_API_KEY");
   if (!apiKey) throw new ProviderError("MODEL_NOT_CONFIGURED", "Gemini is unavailable until GEMINI_API_KEY is configured.", 503);
   const model = modelForProvider("gemini");
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const response = await requestWithRetry("Gemini", `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
@@ -157,7 +226,7 @@ async function executeOpenAI(request: ProviderRequest): Promise<ProviderResult> 
   const apiKey = runtimeValue("OPENAI_API_KEY");
   if (!apiKey) throw new ProviderError("MODEL_NOT_CONFIGURED", "OpenAI is unavailable until OPENAI_API_KEY is configured.", 503);
   const model = modelForProvider("openai");
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await requestWithRetry("OpenAI", "https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
@@ -206,7 +275,7 @@ async function executeAnthropic(request: ProviderRequest): Promise<ProviderResul
   const apiKey = runtimeValue("ANTHROPIC_API_KEY");
   if (!apiKey) throw new ProviderError("MODEL_NOT_CONFIGURED", "Anthropic is unavailable until ANTHROPIC_API_KEY is configured.", 503);
   const model = modelForProvider("anthropic");
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await requestWithRetry("Anthropic", "https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "anthropic-version": "2023-06-01",
@@ -263,7 +332,7 @@ async function executeOllama(request: ProviderRequest): Promise<ProviderResult> 
   const baseUrl = runtimeValue("OLLAMA_BASE_URL") || "http://127.0.0.1:11434";
   let response: Response;
   try {
-    response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/chat`, {
+    response = await requestWithRetry("Ollama", `${baseUrl.replace(/\/$/, "")}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -275,8 +344,10 @@ async function executeOllama(request: ProviderRequest): Promise<ProviderResult> 
           { role: "user", content: `${request.prompt}\n\nSUPPLIED SOURCES\n\n${request.sourceText}` },
         ],
       }),
-    });
-  } catch {
+    }, LOCAL_REQUEST_TIMEOUT_MS);
+  } catch (cause) {
+    // A timeout is a running-but-slow Ollama; anything else means nothing answered.
+    if (cause instanceof ProviderError && cause.code === "MODEL_REQUEST_TIMEOUT") throw cause;
     throw new ProviderError("MODEL_NOT_CONFIGURED", `Ollama is not reachable at ${baseUrl}.`, 503);
   }
   const data = await parseProviderResponse<{

@@ -24,6 +24,13 @@ export type WorkflowCandidate = {
   evidence: string;
 };
 
+/** The three workflows a learner marked as priorities, in the order they were captured. */
+export function priorityWorkflows(
+  map: { workflows: WorkflowCandidate[]; priorityWorkflowIds: string[] } | null | undefined,
+) {
+  return (map?.workflows ?? []).filter((workflow) => map?.priorityWorkflowIds.includes(workflow.id));
+}
+
 const count = (text: string, expression: RegExp) => text.match(expression)?.length ?? 0;
 
 /** Runs only in the browser. The returned structural profile contains no source text. */

@@ -1,4 +1,11 @@
-export type ModelProvider = "gemini" | "openai" | "anthropic" | "ollama";
+export const MODEL_PROVIDERS = ["gemini", "openai", "anthropic", "ollama"] as const;
+
+export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
+
+/** Guards request bodies, which arrive as untyped JSON, before a provider is dispatched. */
+export function isModelProvider(value: unknown): value is ModelProvider {
+  return typeof value === "string" && (MODEL_PROVIDERS as readonly string[]).includes(value);
+}
 
 export type ModelUsage = {
   inputTokens: number;

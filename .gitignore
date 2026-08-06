@@ -58,3 +58,9 @@ next-env.d.ts
 /**/implementation.md
 /**/*-IMPLEMENTATION.md
 /**/*-implementation.md
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# electron-builder output
+/release/

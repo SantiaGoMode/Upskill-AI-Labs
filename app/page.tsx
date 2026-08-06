@@ -1,5 +1,10 @@
-import { ProgramWorkspace } from "./program-workspace";
+import type { Metadata } from "next";
+import { TodayView } from "./components/today-view";
+
+export const metadata: Metadata = {
+  title: "Today",
+};
 
 export default function Home() {
-  return <ProgramWorkspace />;
+  return <TodayView />;
 }

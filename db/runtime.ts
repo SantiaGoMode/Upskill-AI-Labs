@@ -2,13 +2,51 @@ import { env } from "cloudflare:workers";
 
 let initialization: Promise<void> | null = null;
 
+/**
+ * A managed environment is migrated ahead of traffic with
+ * `wrangler d1 migrations apply`, so it must never issue DDL on a request path.
+ * A local checkout has no migration step and creates missing tables on demand.
+ */
+function isManagedEnvironment() {
+  const name = env.ENVIRONMENT?.trim().toLowerCase() ?? "";
+  return name !== "" && name !== "development" && name !== "local" && name !== "test";
+}
+
+/**
+ * Ensures the database is usable before a route touches it. Resolves once per
+ * isolate; a failure is not cached, because a cached rejection would make one
+ * transient D1 error outlive the request that caused it.
+ */
 export function ensureLabSchema() {
   if (!env.DB) {
     throw new Error("Cloudflare D1 binding `DB` is unavailable.");
   }
 
   if (!initialization) {
-    initialization = (async () => {
+    const pending = isManagedEnvironment() ? verifyMigratedSchema() : createLocalSchema();
+    initialization = pending.catch((cause: unknown) => {
+      initialization = null;
+      throw cause;
+    });
+  }
+
+  return initialization;
+}
+
+/** Fails loudly, and cheaply, when a deployment has not been migrated. */
+async function verifyMigratedSchema() {
+  const table = await env.DB
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .bind("lab_attempts")
+    .first<{ name: string }>();
+  if (!table) {
+    throw new Error(
+      "The D1 database has no application schema. Apply migrations with `wrangler d1 migrations apply DB --remote --env production` before serving traffic."
+    );
+  }
+}
+
+async function createLocalSchema() {
       await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS lab_attempts (
         id TEXT PRIMARY KEY NOT NULL,
@@ -185,7 +223,8 @@ export function ensureLabSchema() {
         id TEXT PRIMARY KEY NOT NULL, cohort_id TEXT NOT NULL REFERENCES cohorts(id),
         title TEXT NOT NULL, scheduled_at TEXT NOT NULL, duration_minutes INTEGER DEFAULT 60 NOT NULL,
         status TEXT DEFAULT 'scheduled' NOT NULL, agenda TEXT DEFAULT '' NOT NULL,
-        created_by TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+        created_by TEXT NOT NULL, meeting_uri TEXT, meeting_space TEXT, meeting_code TEXT,
+        meeting_source TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS cohort_sessions_cohort_idx ON cohort_sessions (cohort_id)"),
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS live_rooms (
@@ -207,7 +246,12 @@ export function ensureLabSchema() {
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS live_room_board_cards (
         id TEXT PRIMARY KEY NOT NULL, room_id TEXT NOT NULL REFERENCES live_rooms(id),
         section_key TEXT NOT NULL, author_email TEXT NOT NULL, body TEXT NOT NULL,
-        color TEXT DEFAULT 'blue' NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+        color TEXT DEFAULT 'blue' NOT NULL, kind TEXT DEFAULT 'note' NOT NULL,
+        x INTEGER DEFAULT 40 NOT NULL, y INTEGER DEFAULT 40 NOT NULL,
+        width INTEGER DEFAULT 220 NOT NULL, height INTEGER DEFAULT 140 NOT NULL,
+        payload TEXT DEFAULT '{}' NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS live_room_board_cards_room_idx ON live_room_board_cards (room_id)"),
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS cohort_interventions (
@@ -243,6 +287,22 @@ export function ensureLabSchema() {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
       )`),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS audit_events_entity_idx ON audit_events (entity_type, entity_id)"),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS lesson_progress (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, module_id TEXT NOT NULL,
+        lesson_id TEXT NOT NULL, status TEXT DEFAULT 'completed' NOT NULL,
+        score INTEGER, total INTEGER,
+        completed_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS model_usage_events (
+        id TEXT PRIMARY KEY NOT NULL, owner_email TEXT NOT NULL, purpose TEXT NOT NULL,
+        provider TEXT NOT NULL, model TEXT NOT NULL, estimated_usd REAL,
+        total_tokens INTEGER DEFAULT 0 NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS model_usage_events_owner_idx ON model_usage_events (owner_email, created_at)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS lesson_progress_owner_idx ON lesson_progress (owner_email)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS lesson_progress_lesson_idx ON lesson_progress (owner_email, lesson_id)"),
       ]);
       const columns = await env.DB.prepare("PRAGMA table_info(lab_attempts)").all<{ name: string }>();
       if (!columns.results.some((column) => column.name === "owner_email")) {
@@ -255,8 +315,25 @@ export function ensureLabSchema() {
       if (!cohortColumnNames.has("starts_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN starts_at TEXT").run();
       if (!cohortColumnNames.has("ends_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN ends_at TEXT").run();
       if (!cohortColumnNames.has("archived_at")) await env.DB.prepare("ALTER TABLE cohorts ADD COLUMN archived_at TEXT").run();
-    })();
-  }
-
-  return initialization;
+      const sessionColumns = await env.DB.prepare("PRAGMA table_info(cohort_sessions)").all<{ name: string }>();
+      const sessionColumnNames = new Set(sessionColumns.results.map((column) => column.name));
+      for (const column of ["meeting_uri", "meeting_space", "meeting_code", "meeting_source"]) {
+        if (!sessionColumnNames.has(column)) await env.DB.prepare(`ALTER TABLE cohort_sessions ADD COLUMN ${column} TEXT`).run();
+      }
+      const cardColumns = await env.DB.prepare("PRAGMA table_info(live_room_board_cards)").all<{ name: string }>();
+      const cardColumnNames = new Set(cardColumns.results.map((column) => column.name));
+      const cardAdditions: Array<[string, string]> = [
+        ["kind", "TEXT DEFAULT 'note' NOT NULL"],
+        ["x", "INTEGER DEFAULT 40 NOT NULL"],
+        ["y", "INTEGER DEFAULT 40 NOT NULL"],
+        ["width", "INTEGER DEFAULT 220 NOT NULL"],
+        ["height", "INTEGER DEFAULT 140 NOT NULL"],
+        ["payload", "TEXT DEFAULT '{}' NOT NULL"],
+        ["updated_at", "TEXT"],
+      ];
+      for (const [column, definition] of cardAdditions) {
+        if (!cardColumnNames.has(column)) {
+          await env.DB.prepare(`ALTER TABLE live_room_board_cards ADD COLUMN ${column} ${definition}`).run();
+        }
+      }
 }

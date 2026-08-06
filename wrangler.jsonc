@@ -1,0 +1,100 @@
+/**
+ * Cloudflare Worker configuration. This is the single source of truth for both
+ * local development (read by the Vite plugin) and deployment: `npm run build`
+ * emits a deploy-ready copy at `dist/server/wrangler.json`.
+ *
+ * Before the first deployment, create the database and paste its id below:
+ *
+ *   npx wrangler d1 create upskill-ai-labs
+ *   npx wrangler d1 migrations apply upskill-ai-labs --remote
+ *
+ * Provider keys and identity secrets are never stored here. Set them with
+ * `npx wrangler secret put NAME` so they are not committed.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "upskill-ai-labs",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Cloudflare's own request logs and traces. Without this, a failed provider
+  // call in production leaves nothing to inspect.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // `worker/index.ts` reads env.ASSETS to serve the optimizer's source images.
+  "assets": {
+    "binding": "ASSETS"
+  },
+
+  // `worker/index.ts` reads env.IMAGES to transform them.
+  "images": {
+    "binding": "IMAGES"
+  },
+
+  // Nightly prompt-retention purge. The window itself comes from the active
+  // governance policy, not from this schedule.
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
+
+  // One channel per Live Room session, fanning out change notifications over
+  // WebSockets so participants do not poll the database.
+  "durable_objects": {
+    "bindings": [{ "name": "LIVE_ROOM", "class_name": "LiveRoomSocket" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoomSocket"] }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "upskill-ai-labs-local",
+      // Placeholder. Local development ignores this value; a deployment must
+      // replace it with the id printed by `wrangler d1 create`.
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  "vars": {
+    // Absent or "development" lets API routes create missing tables for a clean
+    // local checkout. Any other value requires migrations to have been applied.
+    "ENVIRONMENT": "development"
+  },
+
+  "env": {
+    "production": {
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      "triggers": {
+        "crons": ["0 3 * * *"]
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "LIVE_ROOM", "class_name": "LiveRoomSocket" }]
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoomSocket"] }],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "assets": {
+        "binding": "ASSETS"
+      },
+      "images": {
+        "binding": "IMAGES"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "upskill-ai-labs",
+          "database_id": "00000000-0000-4000-8000-000000000000",
+          "migrations_dir": "drizzle"
+        }
+      ]
+    }
+  }
+}

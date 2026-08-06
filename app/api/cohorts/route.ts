@@ -4,6 +4,8 @@ import { ensureLabSchema } from "../../../db/runtime";
 import { cohortEnrollments, cohortInterventions, cohorts, cohortSessions, curriculumVersions, evalResults, labAttempts, labSubmissions, organizations } from "../../../db/schema";
 import { ensureFacilitatorOrganization, inviteCohortLearners } from "../../lib/cohort-operations";
 import { recordAudit } from "../../lib/governance";
+import { byText, byTextDesc, selectInChunks } from "../../lib/sql-chunks";
+import { readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 
 const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value) as T; } catch { return fallback; } };
@@ -11,10 +13,12 @@ const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value
 async function learnerProgress(emails: string[]) {
   if (!emails.length) return new Map<string, { completedLabs: string[]; passedLabs: string[]; lastActivity: string | null }>();
   const db = getDb();
-  const attempts = await db.select().from(labAttempts).where(inArray(labAttempts.ownerEmail, emails));
-  const submissions = await db.select({ ownerEmail: labAttempts.ownerEmail, labId: labAttempts.labId, passed: evalResults.passed })
-    .from(labSubmissions).innerJoin(labAttempts, eq(labAttempts.id, labSubmissions.attemptId)).innerJoin(evalResults, eq(evalResults.submissionId, labSubmissions.id))
-    .where(inArray(labAttempts.ownerEmail, emails));
+  const attempts = await selectInChunks(emails, (batch) =>
+    db.select().from(labAttempts).where(inArray(labAttempts.ownerEmail, batch)));
+  const submissions = await selectInChunks(emails, (batch) =>
+    db.select({ ownerEmail: labAttempts.ownerEmail, labId: labAttempts.labId, passed: evalResults.passed })
+      .from(labSubmissions).innerJoin(labAttempts, eq(labAttempts.id, labSubmissions.attemptId)).innerJoin(evalResults, eq(evalResults.submissionId, labSubmissions.id))
+      .where(inArray(labAttempts.ownerEmail, batch)));
   return new Map(emails.map((email) => {
     const owned = attempts.filter((attempt) => attempt.ownerEmail === email);
     return [email, {
@@ -28,11 +32,20 @@ async function learnerProgress(emails: string[]) {
 async function buildCohortViews(rows: Array<typeof cohorts.$inferSelect>) {
   if (!rows.length) return [];
   const db = getDb(); const ids = rows.map((row) => row.id);
-  const enrollments = await db.select().from(cohortEnrollments).where(inArray(cohortEnrollments.cohortId, ids));
-  const sessions = await db.select().from(cohortSessions).where(inArray(cohortSessions.cohortId, ids)).orderBy(cohortSessions.scheduledAt);
-  const interventions = await db.select().from(cohortInterventions).where(inArray(cohortInterventions.cohortId, ids)).orderBy(desc(cohortInterventions.createdAt));
+  // Chunked: a facilitator accumulates cohorts over time, and one `inArray` over
+  // every id exceeds D1's bound-parameter limit. Ordering is reapplied after the
+  // chunks are concatenated, since each query only orders its own batch.
+  const enrollments = await selectInChunks(ids, (batch) =>
+    db.select().from(cohortEnrollments).where(inArray(cohortEnrollments.cohortId, batch)));
+  const sessions = (await selectInChunks(ids, (batch) =>
+    db.select().from(cohortSessions).where(inArray(cohortSessions.cohortId, batch))))
+    .sort(byText((session) => session.scheduledAt));
+  const interventions = (await selectInChunks(ids, (batch) =>
+    db.select().from(cohortInterventions).where(inArray(cohortInterventions.cohortId, batch))))
+    .sort(byTextDesc((note) => note.createdAt));
   const progress = await learnerProgress([...new Set(enrollments.map((item) => item.learnerEmail))]);
-  const versions = await db.select().from(curriculumVersions).where(inArray(curriculumVersions.id, [...new Set(rows.map((row) => row.curriculumVersionId))]));
+  const versions = await selectInChunks([...new Set(rows.map((row) => row.curriculumVersionId))], (batch) =>
+    db.select().from(curriculumVersions).where(inArray(curriculumVersions.id, batch)));
   return rows.map((cohort) => {
     const learnerRows = enrollments.filter((item) => item.cohortId === cohort.id).map((enrollment) => {
       const item = progress.get(enrollment.learnerEmail) ?? { completedLabs: [], passedLabs: [], lastActivity: null };
@@ -57,7 +70,8 @@ export async function GET(request: Request) {
     return Response.json({ identity, organization, cohorts: await buildCohortViews(rows) });
   }
   const enrollments = await db.select().from(cohortEnrollments).where(eq(cohortEnrollments.learnerEmail, identity.email));
-  const rows = enrollments.length ? await db.select().from(cohorts).where(inArray(cohorts.id, enrollments.map((item) => item.cohortId))) : [];
+  const rows = await selectInChunks(enrollments.map((item) => item.cohortId), (batch) =>
+    db.select().from(cohorts).where(inArray(cohorts.id, batch)));
   const views = await buildCohortViews(rows);
   return Response.json({ identity, cohorts: views.map((cohort) => ({
     id: cohort.id,
@@ -74,7 +88,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   if (identity.role !== "facilitator") return facilitatorRequiredResponse();
-  const body = await request.json() as Record<string, unknown>; const action = String(body.action ?? ""); const db = getDb();
+  const parsed = await readJsonBody<Record<string, unknown>>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body; const action = String(body.action ?? ""); const db = getDb();
   const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);
   if (action === "rename-organization") {
     const name = String(body.name ?? "").trim(); if (name.length < 3) return Response.json({ error: "Organization name is required" }, { status: 400 });
@@ -88,7 +104,7 @@ export async function POST(request: Request) {
     const emails = Array.isArray(body.emails) ? body.emails.map(String) : [];
     const invitations = await inviteCohortLearners(cohort.id, organization.id, emails);
     await recordAudit(identity.email, "cohort.learners-invited", "cohort", cohort.id, { count: invitations.length });
-    return Response.json({ invitations: invitations.map((item) => ({ ...item, joinPath: `/?invite=${item.token}` })) }, { status: 201 });
+    return Response.json({ invitations: invitations.map((item) => ({ ...item, joinPath: `/account?invite=${item.token}` })) }, { status: 201 });
   }
   if (action === "schedule-session") {
     const title = String(body.title ?? "").trim(); const scheduledAt = String(body.scheduledAt ?? ""); const durationMinutes = Number(body.durationMinutes ?? 60);

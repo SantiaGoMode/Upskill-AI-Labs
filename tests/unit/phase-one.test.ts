@@ -40,7 +40,7 @@ describe("regression runner", () => {
 describe("judge aggregation and calibration", () => {
   const judge = (id: string, grounding: "Developing" | "Capable" | "Strong"): JudgeRecord => ({
     id, provider: "test", model: "test", judgeIndex: Number(id), overallRationale: "",
-    dimensions: Object.fromEntries(rubricDimensions.map((dimension) => [dimension, { band: dimension === "grounding" ? grounding : "Capable", rationale: "", evidence: [] }])) as JudgeRecord["dimensions"],
+    dimensions: Object.fromEntries(rubricDimensions.map((dimension) => [dimension, { band: dimension === "grounding" ? grounding : "Capable", rationale: "", evidence: [] as string[] }])) as JudgeRecord["dimensions"],
   });
 
   it("surfaces majority bands and confidence", () => {

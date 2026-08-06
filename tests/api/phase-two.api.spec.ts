@@ -98,8 +98,12 @@ test("trainer can run a private, shared Live Room for an enrolled learner", asyn
   expect(learnerRoom.room.sharedPrompt).toContain("decision-ready summary");
   expect(learnerRoom.cards[0].body).toBe("Name uncertainty explicitly.");
   expect(JSON.stringify(learnerRoom)).not.toContain("private-peer@example.com");
-  const learnerCard = await request.post("/api/live-room", { data: { action: "add-card", sessionId, body: "Which source resolves the timeline conflict?", color: "blue" } });
-  expect(learnerCard.status()).toBe(200);
+  // Creating a board object returns 201, consistent with open-room.
+  const learnerCard = await request.post("/api/live-room", { data: { action: "add-card", sessionId, body: "Which source resolves the timeline conflict?", color: "blue", x: 120, y: 200 } });
+  expect(learnerCard.status()).toBe(201);
+  const placed = (await learnerCard.json()).cards.at(-1);
+  expect(placed.x).toBe(120);
+  expect(placed.y).toBe(200);
   const deniedProgression = await request.post("/api/live-room", { data: { action: "set-section", sessionId, labId: "lab-03", section: "Synthesis" } });
   expect(deniedProgression.status()).toBe(403);
   const denied = await request.post("/api/cohorts", { data: { action: "update-status", cohortId, status: "active" } });

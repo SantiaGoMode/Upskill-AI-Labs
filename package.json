@@ -9,22 +9,32 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern release",
+    "typecheck": "tsc --noEmit",
+    "build:production": "CLOUDFLARE_ENV=production vinext build",
+    "deploy": "npm run build:production && wrangler deploy -c dist/server/wrangler.json",
     "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.jsonc",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production -c wrangler.jsonc",
+    "desktop": "npm run build && electron desktop/main.mjs",
+    "desktop:package": "npm run build && electron-builder",
     "data:generate": "node scripts/generate-northwind.mjs",
     "test": "npm run test:unit && npm run test:api && npm run test:e2e",
     "test:unit": "vitest run --config vitest.config.ts tests/unit",
     "test:api": "playwright test api",
-    "test:e2e": "playwright test e2e"
+    "test:e2e": "playwright test e2e",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
     "next": "16.2.12",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "wrangler": "4.92.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
@@ -33,15 +43,17 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
     "react-server-dom-webpack": "19.2.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
-    "vitest": "^4.1.10",
-    "wrangler": "4.92.0"
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "next": {
@@ -49,5 +61,48 @@
       "sharp": "0.35.3"
     }
   },
-  "type": "module"
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "build": {
+    "appId": "ai.zealitconsultants.upskill-ai-labs",
+    "productName": "Upskill AI Labs",
+    "files": [
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/next/**",
+      "!node_modules/react/**",
+      "!node_modules/react-dom/**",
+      "!node_modules/drizzle-orm/**",
+      "!node_modules/@next/**",
+      "!node_modules/@img/**"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "dist"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.education"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Education"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "directories": {
+      "output": "release"
+    },
+    "asar": false
+  }
 }

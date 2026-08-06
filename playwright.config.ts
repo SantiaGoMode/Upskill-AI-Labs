@@ -4,6 +4,12 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: ["api/**/*.spec.ts", "e2e/**/*.spec.ts"],
   fullyParallel: false,
+  // Every spec drives the same dev server and the same local D1 file. Concurrent
+  // writers there produce SQLITE_BUSY rather than useful parallelism.
+  workers: 1,
+  // No retries anywhere. An earlier intermittent failure here looked like emulator
+  // flakiness and was in fact a real bound-parameter bug that only surfaced once the
+  // local database had grown past ~100 cohorts; a retry would have kept hiding it.
   retries: 0,
   reporter: "line",
   use: {

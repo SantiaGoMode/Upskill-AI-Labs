@@ -1,8 +1,49 @@
+/** How an artifact is rendered. Evidence should look like the thing it is. */
+export type SourceKind =
+  | "email"
+  | "dashboard"
+  | "register"
+  | "plan"
+  | "chat"
+  | "policy"
+  | "gates"
+  | "schema"
+  | "update"
+  | "doc";
+
+export type Metric = {
+  label: string;
+  value: string;
+  target?: string;
+  /** Drives the colour of the tile. Absent means neutral. */
+  status?: "ok" | "warn" | "risk";
+  /** 0-100, renders a bar under the value. */
+  percent?: number;
+};
+
+export type TimelineItem = {
+  label: string;
+  planned: string;
+  actual?: string;
+  status: "done" | "late" | "due" | "at-risk";
+};
+
+export type GateItem = { name: string; actual: string; target: string; pass: boolean };
+
+export type ChatMessage = { author: string; role?: string; text: string; time?: string };
+
 export type SourceSection = {
   heading?: string;
   paragraphs?: string[];
   bullets?: string[];
   callout?: { label: string; title: string; body: string };
+  /** Rich blocks. Rendered above prose in the order declared here. */
+  metrics?: Metric[];
+  timeline?: TimelineItem[];
+  gates?: GateItem[];
+  chat?: ChatMessage[];
+  table?: { head: string[]; rows: string[][] };
+  fields?: string[];
 };
 
 export type LabSource = {
@@ -10,6 +51,7 @@ export type LabSource = {
   title: string;
   note: string;
   classification: "Internal" | "Contains confidential data";
+  kind?: SourceKind;
   meta?: Array<[string, string]>;
   sections: SourceSection[];
 };
@@ -20,6 +62,7 @@ export const labSources: LabSource[] = [
     title: "Request email",
     note: "Confidential data",
     classification: "Contains confidential data",
+    kind: "email",
     meta: [
       ["From", "Elena Marquez, VP Customer Operations"],
       ["Sent", "August 3, 2026, 08:12 MT"],
@@ -39,6 +82,7 @@ export const labSources: LabSource[] = [
     title: "Approved roadmap",
     note: "Current scope",
     classification: "Internal",
+    kind: "policy",
     meta: [["Approved", "July 24, 2026"], ["Owner", "Customer Technology Steering Committee"]],
     sections: [
       { heading: "Pilot objective", paragraphs: ["Prove that 40 West-region support agents can manage email and web support cases in Beacon without a material loss of service quality."] },
@@ -52,9 +96,19 @@ export const labSources: LabSource[] = [
     title: "Delivery capacity",
     note: "Team availability",
     classification: "Internal",
+    kind: "dashboard",
     meta: [["As of", "July 31, 2026"], ["Window", "August 3–September 11"]],
     sections: [
-      { heading: "Unallocated capacity", bullets: ["Product / analysis: 40 hours", "Application engineering: 40 hours, reserved for pilot defects", "Data engineering: 0 hours", "Security engineering: 10 hours", "Quality engineering: 40 hours"] },
+      {
+        heading: "Unallocated capacity",
+        metrics: [
+          { label: "Product / analysis", value: "40h", status: "ok", percent: 100 },
+          { label: "Application eng.", value: "40h", target: "reserved for pilot defects", status: "warn", percent: 100 },
+          { label: "Data engineering", value: "0h", status: "risk", percent: 0 },
+          { label: "Security engineering", value: "10h", status: "warn", percent: 25 },
+          { label: "Quality engineering", value: "40h", status: "ok", percent: 100 },
+        ],
+      },
       { heading: "Planning notes", bullets: ["The dashboard has not been estimated.", "The analyst spreadsheet has not been assessed for source quality or ownership.", "External support normally requires four to six weeks after an approved statement of work."] },
       { heading: "Delivery lead assessment", paragraphs: ["The team can spend up to 16 analysis hours clarifying a proposed change. No implementation capacity should be assumed without a scope trade or new capacity."] },
     ],
@@ -64,6 +118,7 @@ export const labSources: LabSource[] = [
     title: "AI policy",
     note: "Tool boundaries",
     classification: "Internal",
+    kind: "policy",
     meta: [["Version", "1.4"], ["Effective", "July 1, 2026"]],
     sections: [
       { heading: "Approved training tool", paragraphs: ["The AI assistant may process Public or Internal information. It must not receive Confidential or Regulated information. An explicit label always takes precedence."] },
@@ -75,9 +130,13 @@ export const labSources: LabSource[] = [
     title: "Intake structure",
     note: "19 required fields",
     classification: "Internal",
+    kind: "schema",
     sections: [
       { heading: "Evidence artifact", paragraphs: ["Complete every field. Use Unknown when supplied sources do not support a value. Cite source IDs for material claims."] },
-      { heading: "Required fields", bullets: ["Request ID", "Request title", "Requestor", "Business problem", "Requested outcome", "Requested delivery date", "In-scope population", "Proposed capabilities", "Acceptance criteria", "Business owner", "Delivery owner", "Funding code", "Data classes involved", "Dependencies", "Capacity impact", "Roadmap alignment", "Decision owner", "Recommended disposition", "Disposition rationale"] },
+      {
+        heading: "Required fields",
+        fields: ["Request ID", "Request title", "Requestor", "Business problem", "Requested outcome", "Requested delivery date", "In-scope population", "Proposed capabilities", "Acceptance criteria", "Business owner", "Delivery owner", "Funding code", "Data classes involved", "Dependencies", "Capacity impact", "Roadmap alignment", "Decision owner", "Recommended disposition", "Disposition rationale"],
+      },
     ],
   },
 ];
