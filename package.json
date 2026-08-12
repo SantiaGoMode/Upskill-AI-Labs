@@ -12,7 +12,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern release",
     "typecheck": "tsc --noEmit",
     "build:production": "ENVIRONMENT=production next build",
-    "deploy": "firebase apphosting:rollouts:create upskill-ai-labs --project processbridge",
+    "deploy": "firebase deploy --only apphosting:upskill-ai-labs --project processbridge --force",
     "data:generate": "node scripts/generate-northwind.mjs",
     "test": "npm run test:unit && npm run test:api && npm run test:e2e",
     "test:unit": "vitest run --config vitest.config.ts tests/unit",

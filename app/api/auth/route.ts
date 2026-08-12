@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     if (!body.idToken) return Response.json({ error: "Google sign-in token is required" }, { status: 400 });
     let token: Awaited<ReturnType<ReturnType<typeof getAuth>["verifyIdToken"]>>;
     try {
-      token = await getAuth(getAdminApp()).verifyIdToken(body.idToken, true);
+      token = await getAuth(getAdminApp()).verifyIdToken(body.idToken);
     } catch {
       return Response.json({ error: "Google sign-in could not be verified" }, { status: 401 });
     }

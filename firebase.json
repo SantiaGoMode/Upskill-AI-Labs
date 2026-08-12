@@ -1,4 +1,9 @@
 {
+  "apphosting": {
+    "backendId": "upskill-ai-labs",
+    "rootDir": ".",
+    "alwaysDeployFromSource": true
+  },
   "firestore": {
     "database": "(default)",
     "location": "us-central1",

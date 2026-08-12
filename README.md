@@ -425,7 +425,9 @@ tested in `tests/unit/cross-site.test.ts` and `tests/unit/request-limits.test.ts
 ## Firebase deployment
 
 The Firebase configuration targets project `processbridge` and backend
-`upskill-ai-labs`. The runtime is intentionally capped in `apphosting.yaml` at zero
+`upskill-ai-labs`. Releases upload the current local source after it passes local
+validation; `.gitignore` keeps local environment files and build output out of the
+archive. The runtime is intentionally capped in `apphosting.yaml` at zero
 idle instances and two maximum instances. Analytics remains disabled unless explicitly
 enabled. Before the first rollout:
 
