@@ -1,4 +1,4 @@
-import { desc, inArray, ne } from "drizzle-orm";
+import { desc, inArray, ne } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { auditEvents, policyProfiles } from "../../../db/schema";

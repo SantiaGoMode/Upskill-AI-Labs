@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohortSessions, liveRoomBoardCards, liveRoomParticipants, liveRooms } from "../../../db/schema";

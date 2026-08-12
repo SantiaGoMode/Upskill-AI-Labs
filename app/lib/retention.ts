@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import {
   capabilityClaims,
@@ -77,10 +77,8 @@ export async function purgeExpiredPromptData(): Promise<{ retentionDays: number;
 /**
  * Everything the application holds for one learner, for a data-subject request.
  *
- * Owner-keyed tables are read in one batched round trip: D1 bills and queues per
- * statement, and a long sequence of them is where contention shows up. The
- * id-keyed reads are chunked instead, because a learner with more than ~100
- * attempts would otherwise exceed D1's bound-parameter limit.
+ * Owner-keyed tables are read concurrently. The id-keyed reads are chunked to stay
+ * inside Firestore's `in` query value limit.
  */
 export async function exportLearnerData(email: string) {
   const db = getDb();
@@ -152,9 +150,8 @@ export async function deleteLearnerData(email: string): Promise<PurgeCounts> {
     db.select({ id: labSubmissions.id }).from(labSubmissions).where(inArray(labSubmissions.attemptId, batch))
   )).map((submission) => submission.id);
 
-  // Child-first, and chunked so no single statement exceeds D1's bound-parameter
-  // limit. Every statement still goes out in one batch, so a half-erased account
-  // stays unreachable however many chunks a large account needs.
+  // Child-first and chunked so no query exceeds Firestore's value limit. Erasure is
+  // idempotent: if a transient failure interrupts it, retrying finishes the remainder.
   const deletions: Array<{ label: string; statement: unknown }> = [];
   const add = (label: string, statement: unknown) => deletions.push({ label, statement });
 

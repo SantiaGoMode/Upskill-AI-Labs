@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { evalResults, humanReviews, judgeResults, labAttempts, labSubmissions, scoreAppeals } from "../../../db/schema";

@@ -1,27 +1,8 @@
 import type { Metadata } from "next";
-import { DM_Sans, JetBrains_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "./components/app-shell";
+import { FirebaseClientInitializer } from "./components/firebase-client-initializer";
 import { themeBootstrapScript } from "./components/theme-toggle";
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  display: "swap",
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-mono-code",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -41,7 +22,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
-      <body className={`${dmSans.variable} ${manrope.variable} ${jetBrainsMono.variable} antialiased`}>
+      <body className="antialiased">
+        <FirebaseClientInitializer />
         <AppShell>{children}</AppShell>
       </body>
     </html>

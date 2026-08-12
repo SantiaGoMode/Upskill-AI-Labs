@@ -134,9 +134,9 @@
   --color-info-fg: var(--info-fg);
   --color-info-line: var(--info-line);
 
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-manrope), var(--font-dm-sans), ui-sans-serif, sans-serif;
-  --font-mono: var(--font-mono-code), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Avenir Next", Avenir, ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Avenir Next", Avenir, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
   --radius-card: 12px;
 }

@@ -46,8 +46,8 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      # API and browser suites boot the app on port 3100 with a local D1 database.
-      # No provider credentials are configured, so no live model calls are made.
+      # API and browser suites boot the app on port 3100 with the in-memory adapter.
+      # Firebase Analytics and provider credentials are absent, so no cloud calls run.
       - name: API tests
         run: npm run test:api
 

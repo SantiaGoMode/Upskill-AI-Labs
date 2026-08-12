@@ -1,5 +1,4 @@
-import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, sql, text } from "./firestore-schema";
 
 export const labAttempts = sqliteTable(
   "lab_attempts",

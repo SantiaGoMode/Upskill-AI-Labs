@@ -2,15 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { createCohortRoom, openRoom } from "../support/rooms";
 
 /**
- * Opens a socket from inside the page and reports what happened. Run in the browser so
- * the handshake carries the signed-in learner's session cookie, which is how identity
- * reaches a WebSocket: the API cannot send an identity header on an upgrade.
+ * Opens an event stream from inside the page and reports what happened. Running in the
+ * browser carries the signed-in learner's session cookie through the request.
  */
-function socketOutcome(page: Page, sessionId: string) {
+function channelOutcome(page: Page, sessionId: string) {
   return page.evaluate((id) => new Promise<string>((resolve) => {
-    const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/live-room/socket?sessionId=${encodeURIComponent(id)}`);
-    socket.addEventListener("message", () => { socket.close(); resolve("connected"); });
-    socket.addEventListener("error", () => resolve("rejected"));
+    const source = new EventSource(`/api/live-room/channel?sessionId=${encodeURIComponent(id)}`);
+    source.addEventListener("message", () => { source.close(); resolve("connected"); });
+    source.addEventListener("error", () => { source.close(); resolve("rejected"); });
     setTimeout(() => resolve("timeout"), 6000);
   }), sessionId);
 }
@@ -32,13 +31,13 @@ test("the Live Room connects to its channel and receives a pushed change", async
   await expect(page.getByText("Pushed without a reload.")).toBeVisible({ timeout: 8_000 });
 });
 
-test("a learner in another cohort cannot open a socket on someone else's session", async ({ page }) => {
+test("a learner in another cohort cannot open a channel on someone else's session", async ({ page }) => {
   // Two independent cohorts, each with its own room and its own invited learner.
   const target = await createCohortRoom(page.request, "channel-target");
   const other = await createCohortRoom(page.request, "channel-outsider");
 
   // Sign in as the second cohort's learner. The session cookie lands in this browser
-  // context, so the socket handshake below is made as that learner.
+  // context, so the stream request below is made as that learner.
   const accepted = await page.request.post("/api/auth", {
     data: { action: "sign-in", inviteToken: other.inviteToken },
   });
@@ -49,6 +48,6 @@ test("a learner in another cohort cannot open a socket on someone else's session
   await expect(page.getByText("channel-outsider-learner@example.com")).toBeVisible();
 
   // Their own room is reachable, so a rejection below is about access, not plumbing.
-  expect(await socketOutcome(page, other.sessionId)).toBe("connected");
-  expect(await socketOutcome(page, target.sessionId)).toBe("rejected");
+  expect(await channelOutcome(page, other.sessionId)).toBe("connected");
+  expect(await channelOutcome(page, target.sessionId)).toBe("rejected");
 });

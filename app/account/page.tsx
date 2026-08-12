@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import type { PersistedAttempt } from "../lib/attempt-types";
 import { labById } from "../lib/labs";
 import { errorMessage, formatDateTime, post, useIdentity, useResource } from "../lib/client-api";
+import { signInWithGoogle, signOutOfFirebase } from "../lib/firebase-client";
 import {
   Badge,
   Banners,
@@ -31,7 +32,7 @@ export default function AccountPage() {
 function AccountView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { identity, sessionsAvailable, developerSignInAvailable, loading, reload } = useIdentity();
+  const { identity, sessionsAvailable, developerSignInAvailable, firebaseSignInAvailable, loading, reload } = useIdentity();
   const history = useResource<{ attempts: PersistedAttempt[] }>("/api/attempts?history=1");
 
   const [email, setEmail] = useState("");
@@ -74,7 +75,25 @@ function AccountView() {
     if (await submitAuth(body, "Sign-in failed")) setInviteToken("");
   }
 
-  const signOut = () => submitAuth({ action: "sign-out" }, "Sign-out failed");
+  async function googleSignIn() {
+    setBusy(true);
+    setError("");
+    try {
+      const idToken = await signInWithGoogle();
+      await post("/api/auth", { action: "firebase-sign-in", idToken });
+      await reload();
+      router.refresh();
+    } catch (cause) {
+      setError(errorMessage(cause, "Google sign-in failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const signOut = async () => {
+    await signOutOfFirebase().catch(() => undefined);
+    await submitAuth({ action: "sign-out" }, "Sign-out failed");
+  };
 
   return (
     <Page>
@@ -111,7 +130,14 @@ function AccountView() {
               )}
             </Card>
           ) : (
-            <Callout tone="warn">No identity resolved for this request.</Callout>
+            <>
+              <Callout tone="warn">No identity resolved for this request.</Callout>
+              {firebaseSignInAvailable ? (
+                <Button variant="primary" className="mt-4 w-full" onClick={() => void googleSignIn()} disabled={busy}>
+                  {busy ? "Signing in…" : "Continue with Google"}
+                </Button>
+              ) : null}
+            </>
           )}
 
           {sessionsAvailable ? (

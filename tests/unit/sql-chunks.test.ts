@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { byText, byTextDesc, chunkIds, MAX_BOUND_IDS, selectInChunks } from "../../app/lib/sql-chunks";
 
-describe("bound-parameter chunking", () => {
-  it("keeps every batch inside D1's parameter limit", () => {
+describe("query-value chunking", () => {
+  it("keeps every batch inside Firestore's in-query limit", () => {
     const ids = Array.from({ length: 205 }, (_, index) => `id-${index}`);
     const batches = chunkIds(ids);
     expect(batches.every((batch) => batch.length <= MAX_BOUND_IDS)).toBe(true);
-    expect(MAX_BOUND_IDS).toBeLessThan(100);
+    expect(MAX_BOUND_IDS).toBe(30);
     // Every id appears exactly once, in order.
     expect(batches.flat()).toEqual(ids);
   });
@@ -33,7 +33,7 @@ describe("bound-parameter chunking", () => {
       seen.push(batch);
       return batch.map((id) => `row-${id}`);
     });
-    expect(seen).toHaveLength(3); // 80 + 80 + 10
+    expect(seen).toHaveLength(6); // 30 + 30 + 30 + 30 + 30 + 20
     expect(rows).toHaveLength(170);
     expect(rows[0]).toBe("row-0");
     expect(rows.at(-1)).toBe("row-169");

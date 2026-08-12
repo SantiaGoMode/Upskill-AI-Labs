@@ -1,14 +1,12 @@
 /**
- * D1 rejects a statement carrying more than 100 bound parameters
- * (`too many SQL variables`). An `inArray(column, ids)` binds one parameter per
- * id, so any query over an unbounded id list fails once the data grows — a
- * facilitator with 100+ cohorts, or a learner with 100+ attempts.
+ * Firestore accepts at most 30 comparison values in an `in` query. Any query over
+ * an unbounded id list therefore needs batching — for example, a facilitator with
+ * many cohorts or a learner with a long attempt history.
  *
  * These helpers split such a query into batches that stay under the limit.
  */
 
-/** Left below 100 so a query can carry other bound parameters alongside the ids. */
-export const MAX_BOUND_IDS = 80;
+export const MAX_BOUND_IDS = 30;
 
 export function chunkIds<T>(ids: readonly T[], size = MAX_BOUND_IDS): T[][] {
   const batches: T[][] = [];
@@ -28,7 +26,7 @@ export function chunkIds<T>(ids: readonly T[], size = MAX_BOUND_IDS): T[][] {
  */
 export async function selectInChunks<Id, Row>(
   ids: readonly Id[],
-  query: (batch: Id[]) => Promise<Row[]>,
+  query: (batch: Id[]) => PromiseLike<Row[]>,
 ): Promise<Row[]> {
   if (!ids.length) return [];
   const rows: Row[] = [];

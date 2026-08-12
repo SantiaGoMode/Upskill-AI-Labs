@@ -1,0 +1,30 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 40
+
+env:
+  - variable: ENVIRONMENT
+    value: production
+    availability:
+      - RUNTIME
+  - variable: FACILITATOR_EMAILS
+    secret: FACILITATOR_EMAILS
+    availability:
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED
+    value: "false"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_REALTIME_ENABLED
+    value: "true"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: SESSION_SECRET
+    secret: SESSION_SECRET
+    availability:
+      - RUNTIME

@@ -15,7 +15,19 @@ export type BoardCard = {
   payload: Record<string, unknown>;
   authorEmail: string;
   mine?: boolean;
+  /** The lab this object was placed under, which is what resolves its source id. */
+  sectionKey?: string;
 };
+
+/**
+ * Which Northwind source an artifact card refers to.
+ *
+ * Mirrors the server's rule in the live-room route: an explicit `payload.sourceId`
+ * wins, and a card typed by hand falls back to the first token of its body, which
+ * is how `NW-ROADMAP-03 · Approved roadmap` still resolves.
+ */
+export const artifactSourceId = (card: BoardCard) =>
+  String(card.payload?.sourceId ?? card.body.split(" ")[0] ?? "").trim();
 
 export type Tool = "select" | "note" | "prompt" | "artifact" | "workflow" | "text" | "ink" | "connect" | "erase";
 
@@ -45,6 +57,13 @@ const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.5;
 
 /**
+ * How far the pointer may travel before a press counts as a drag rather than a
+ * click. Without it, the tremor in an ordinary click would register as a move and
+ * an artifact could never be opened by clicking it.
+ */
+const DRAG_THRESHOLD_PX = 4;
+
+/**
  * A real canvas: pan, zoom, drag objects, draw ink.
  *
  * Positions are persisted per object, so the board a facilitator arranges is the
@@ -65,6 +84,7 @@ export function Whiteboard({
   onConnect,
   connectFrom,
   runningId,
+  onOpenArtifact,
 }: {
   cards: BoardCard[];
   canEdit: boolean;
@@ -79,14 +99,19 @@ export function Whiteboard({
   onConnect?: (sourceCardId: string, targetId: string) => void;
   connectFrom?: string | null;
   runningId?: string | null;
+  /** Called when an artifact card is clicked rather than dragged. */
+  onOpenArtifact?: (card: BoardCard) => void;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
-  const [drag, setDrag] = useState<{ id: string; offset: Point } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; offset: Point; origin: Point } | null>(null);
   const [pan, setPan] = useState<Point | null>(null);
   const [stroke, setStroke] = useState<Point[]>([]);
   /** Local position overrides so dragging stays smooth before the server confirms. */
   const [ghost, setGhost] = useState<Record<string, Point>>({});
+  /** Whether the current press has travelled far enough to be a drag. A ref, so
+   *  crossing the threshold does not re-render mid-gesture. */
+  const dragged = useRef(false);
 
   const toBoard = useCallback(
     (event: { clientX: number; clientY: number }): Point => {
@@ -116,6 +141,11 @@ export function Whiteboard({
       }
       const point = toBoard(event);
       if (drag) {
+        if (!dragged.current) {
+          const travel = Math.hypot(event.clientX - drag.origin.x, event.clientY - drag.origin.y);
+          if (travel <= DRAG_THRESHOLD_PX) return;
+          dragged.current = true;
+        }
         setGhost((current) => ({ ...current, [drag.id]: { x: point.x - drag.offset.x, y: point.y - drag.offset.y } }));
         return;
       }
@@ -125,7 +155,14 @@ export function Whiteboard({
     function handleUp() {
       if (drag) {
         const position = ghost[drag.id];
-        if (position) onMove(drag.id, Math.round(position.x), Math.round(position.y));
+        if (dragged.current && position) {
+          onMove(drag.id, Math.round(position.x), Math.round(position.y));
+        } else if (!dragged.current) {
+          // A press that never became a drag is a click. An artifact opens; anything
+          // else keeps the selection it already took on pointer down.
+          const card = cards.find((item) => item.id === drag.id);
+          if (card?.kind === "artifact") onOpenArtifact?.(card);
+        }
         setDrag(null);
       }
       if (pan) setPan(null);
@@ -154,7 +191,7 @@ export function Whiteboard({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [drag, ghost, onCreate, onMove, pan, stroke, toBoard]);
+  }, [cards, drag, ghost, onCreate, onMove, onOpenArtifact, pan, stroke, toBoard]);
 
   function handleSurfacePointerDown(event: React.PointerEvent) {
     if (event.button !== 0) return;
@@ -261,7 +298,12 @@ export function Whiteboard({
                   }
                   onSelect(card.id);
                   const point = toBoard(event);
-                  setDrag({ id: card.id, offset: { x: point.x - card.x, y: point.y - card.y } });
+                  dragged.current = false;
+                  setDrag({
+                    id: card.id,
+                    offset: { x: point.x - card.x, y: point.y - card.y },
+                    origin: { x: event.clientX, y: event.clientY },
+                  });
                 }}
               />
             );
@@ -475,11 +517,17 @@ function BoardObject({
   if (card.kind === "artifact") {
     return (
       <div
-        className={cx(base, "rounded-[10px] border-l-[4px] border border-l-accent border-line bg-raised px-3 py-2.5 shadow-md", canEdit && "cursor-move", selected && "ring-2 ring-primary")}
+        className={cx(base, "group rounded-[10px] border-l-[4px] border border-l-accent border-line bg-raised px-3 py-2.5 shadow-md", canEdit && "cursor-move", selected && "ring-2 ring-primary")}
         style={style}
         onPointerDown={onPointerDown}
+        title="Click to open this artifact"
       >
-        <p className="eyebrow m-0">Artifact</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="eyebrow m-0">Artifact</p>
+          <span aria-hidden className="text-[11px] text-subtle opacity-0 transition-opacity group-hover:opacity-100">
+            Open ↗
+          </span>
+        </div>
         <p className="m-0 mt-1 font-mono text-[13px] font-bold">{card.body}</p>
       </div>
     );
@@ -514,12 +562,15 @@ export function BoardList({
   onDelete,
   onSelect,
   selectedId,
+  onOpenArtifact,
 }: {
   cards: BoardCard[];
   canEdit: boolean;
   onDelete: (id: string) => void;
   onSelect: (id: string | null) => void;
   selectedId: string | null;
+  /** Peer of the canvas click, so an artifact is reachable from the keyboard. */
+  onOpenArtifact?: (card: BoardCard) => void;
 }) {
   if (!cards.length) {
     return <p className="px-5 py-8 text-center text-[14px] text-muted">Nothing on the board yet.</p>;
@@ -547,6 +598,11 @@ export function BoardList({
             </p>
           </div>
           <div className="flex gap-2">
+            {card.kind === "artifact" && onOpenArtifact ? (
+              <Button size="sm" onClick={() => onOpenArtifact(card)}>
+                Open
+              </Button>
+            ) : null}
             <Button size="sm" variant="ghost" onClick={() => onSelect(card.id)}>
               Select
             </Button>

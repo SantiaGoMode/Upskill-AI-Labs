@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { cohortEnrollments, cohorts, labAttempts, labSubmissions } from "../../db/schema";
 import { selectInChunks } from "./sql-chunks";

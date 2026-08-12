@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { cohortEnrollments, cohorts, organizationMembers, organizations } from "../../db/schema";
 

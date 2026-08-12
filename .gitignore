@@ -61,6 +61,3 @@ next-env.d.ts
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
-
-# electron-builder output
-/release/

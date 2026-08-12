@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /_live_room_signals/{sessionId} {
+      // A signal contains no room state. Signed-in clients may read a known room
+      // path, but cannot enumerate signals or write them.
+      allow get: if request.auth != null;
+      allow list, create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      // All data access goes through authorized Next.js server routes and the
+      // Firebase Admin SDK. Browser clients never read Firestore directly.
+      allow read, write: if false;
+    }
+  }
+}

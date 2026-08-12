@@ -72,15 +72,13 @@ Trainer Studio provides curriculum forks, draft editing, human review, publishin
 
 Scheduled cohort sessions include a shared Live Room with an interactive whiteboard. The facilitator controls progression through the eight lessons, broadcasts the prompt currently under discussion, monitors participant presence, and can clear each lesson's collaborative whiteboard. Enrolled learners follow the active section and contribute notes without receiving peer email addresses.
 
-Changes reach participants over a WebSocket rather than a polling timer. Each session
-has one Durable Object holding the participants' sockets; when the room changes, it
-signals them and each client refetches through the normal authorized API. The socket
-carries no room state, so access checks and peer-email redaction still apply to every
-read, and the WebSocket upgrade is authorized with the same check as the REST route.
-
-The room shows whether that connection is live. If it drops, the client falls back to
-refreshing on a timer and reconnects with backoff, so a failed channel costs freshness
-rather than function.
+Changes reach participants through an authorized Server-Sent Events channel. The
+channel carries only an invalidation signal, never room data; each client refetches
+through the normal authorized API, so access checks and peer-email redaction apply to
+every read. Local development uses an in-process event bus and Server-Sent Events.
+The deployed client listens to one small authenticated Firestore signal document only
+while a participant is connected, avoiding a long-lived App Hosting server request.
+If the channel drops, the client falls back to timed refreshes.
 
 The Capability Ledger creates evidence-linked claims from assessed submissions. Claims expire after 180 days. Workplace-transfer claims additionally require a recorded baseline and a measurement at least 30 days later.
 
@@ -132,28 +130,18 @@ The Account page (`/account`) can create a seven-day session for the configured 
 
 Passwordless sign-in as the configured developer account works only on localhost in a non-managed environment. Invitations are redeemable on any hostname, so a deployed runtime can enroll learners without that shortcut.
 
-### Identity on a deployed runtime
+### Identity on Firebase
 
-An authenticated reverse proxy supplies:
+The deployed app uses Firebase Authentication with Google sign-in. The Next.js server
+verifies the Firebase ID token and then issues a signed, HTTP-only session cookie so
+normal API calls and the Live Room event stream share the same identity. The addresses
+in `FACILITATOR_EMAILS` receive facilitator access; other Google accounts must already
+have an active invitation or membership.
 
-- `oai-authenticated-user-email`
-- `oai-authenticated-user-full-name` when available
-- `oai-authenticated-user-role: facilitator` only for facilitator access
-- `x-upskill-proxy-secret` matching the configured `TRUSTED_PROXY_SECRET`
-
-The secret is what makes the other three believable. Any client can send identity
-headers, so they are honoured only when the proxy secret is presented:
-
-| `TRUSTED_PROXY_SECRET` | Request | Identity headers |
-|---|---|---|
-| Configured | Correct secret presented | Trusted |
-| Configured | Missing or wrong secret | Ignored |
-| Not configured | `ENVIRONMENT` names a deployed environment | Ignored, so the runtime fails closed |
-| Not configured | Local checkout | Trusted, which is how the test suite switches users |
-
-`SESSION_SECRET` signs account session cookies. A managed environment refuses to
-create or accept sessions without it rather than issuing unsigned ones. Set both
-with `wrangler secret put`, never in `wrangler.jsonc`.
+`SESSION_SECRET` signs account session cookies and is stored in Google Secret Manager
+through the App Hosting secret binding in `apphosting.yaml`. A managed environment
+refuses to create or accept sessions without it. The older trusted-proxy header path is
+still available for private deployments, but it is not required by Firebase hosting.
 
 Attempts, histories, submissions, model runs, workflow maps, baselines, measurements, and claims are scoped to the authenticated email on the server.
 
@@ -183,12 +171,17 @@ Facilitator routes are hidden from a learner's navigation and additionally rejec
 
 ## Data and persistence
 
-The application uses Drizzle ORM with a Cloudflare D1 database. Bindings are declared in [`wrangler.jsonc`](./wrangler.jsonc), which both the Vite plugin and `wrangler deploy` read, so local development and deployment cannot drift apart.
+App Hosting stores application records in Cloud Firestore through the Firebase Admin
+SDK. Browser clients have no application-data access. `firestore.rules` denies all
+writes and every data read except an authenticated `get` of a known Live Room signal
+path; authorization and room state remain in the Next.js API routes.
 
-Versioned SQL migrations live in [`drizzle/`](./drizzle), with the schema defined in [`db/schema.ts`](./db/schema.ts). Migrations are the schema contract:
-
-- **Deployed environments** are migrated before serving traffic. A request path never issues DDL; if the schema is missing, the app fails with an explicit instruction to apply migrations instead of silently creating tables.
-- **Local checkouts** have no migration step, so API routes still create missing tables. That is keyed off `ENVIRONMENT`, which is `development` locally and `production` in the deployed environment.
+Local development and all automated tests use an in-process adapter by default, so
+they create no Firestore reads, writes, storage, or network traffic. Set
+`FIRESTORE_EMULATOR_HOST` only when explicitly testing the Firestore adapter. The
+schema contract remains in [`db/schema.ts`](./db/schema.ts); Firestore itself is
+schema-less. Queries push a selective indexed predicate to Firestore and chunk `in`
+lookups at 30 values to avoid collection-wide reads and query-limit failures.
 
 Northwind v1 contains:
 
@@ -220,10 +213,11 @@ Synthetic training content should be used for model experiments. Sources labeled
 
 ### Retention is enforced, not just declared
 
-A nightly Cron Trigger at 03:00 UTC deletes prompt and model-response records older
-than the policy's retention window: model runs, judge results, regression runs, live
-room cards, and usage events. A facilitator can also run it on demand from
-`/governance`, which shows how many records are currently past the window.
+The Governance page can delete prompt and model-response records older than the
+policy's retention window on demand: model runs, judge results, regression runs, live
+room cards, and usage events. No scheduled cloud job is created by default, which
+avoids an unnecessary recurring service. Add a scheduled invocation only when the
+deployment needs automatic retention enforcement.
 
 Submitted artifacts, evaluations, and capability claims are deliberately out of
 scope. They are assessment evidence with their own lifecycle, and a learner is
@@ -234,9 +228,10 @@ enforce something it does not.
 ### Data-subject requests
 
 From `/account`, a learner can export everything held for them as JSON, or erase it.
-Erasure requires typing their own address, removes every learner-owned record in one
-atomic batch, and leaves a single audit event recording that the erasure happened.
-Both operations act only on the caller's own data.
+Erasure requires typing their own address, removes learner-owned records child-first,
+and leaves a single audit event recording that the erasure happened. The operation is
+idempotent, so retrying safely completes any remainder after a transient failure. Both
+operations act only on the caller's own data.
 
 ### Model execution limits
 
@@ -323,14 +318,8 @@ user rather than a service account, so there is no client-credentials path.
 | `npm run test:unit` | Run Vitest unit tests |
 | `npm run test:api` | Run Playwright API tests |
 | `npm run test:e2e` | Run Playwright Chromium flows |
-| `npm run db:generate` | Generate a migration from the Drizzle schema |
-| `npm run db:migrate:local` | Apply migrations to the local D1 database |
-| `npm run db:migrate:production` | Apply migrations to the production D1 database |
 | `npm run build:production` | Build against the production environment configuration |
-| `npm run deploy` | Build for production and deploy the worker |
-| `npm run desktop` | Build, then open the desktop application |
-| `npm run desktop:package` | Build desktop installers into `release/` |
-| `npm run icons` | Regenerate the desktop icons from the brand mark |
+| `npm run deploy` | Create an App Hosting rollout for the configured backend |
 | `npm run data:generate` | Rebuild the Northwind fixture corpus |
 
 Every one of these except `deploy` runs on each push and pull request via
@@ -363,20 +352,19 @@ app/
   global-error.tsx        Root layout error boundary
   not-found.tsx           Unknown route, module, lesson, or lab id
 db/
-  schema.ts               Drizzle table definitions
-  runtime.ts              Local schema creation and deployed-schema verification
+  schema.ts               Application collection and field definitions
+  firestore-orm.ts        Local-memory and Admin Firestore persistence adapter
+  firebase-admin.ts       Process-wide Firebase Admin initialization
+  runtime.ts              Persistence readiness check
 data/northwind-v1/        Synthetic records and document corpus
-drizzle/                  Versioned SQL migrations, applied by wrangler at deploy
-wrangler.jsonc            Worker bindings, cron trigger, and environments
+apphosting.yaml           Cost-capped App Hosting runtime and secret configuration
+firebase.json             Firebase project resource configuration
+firestore.rules           Deny-all browser database policy
 tests/
   unit/                   Pure logic, identity trust, budget, and fixture tests
   api/                    Ownership, data-rights, and API behavior tests
   e2e/                    Chromium course, lab, facilitator, and hardening flows
 tests/support/            Shared fixtures used by both Playwright suites
-desktop/                  Electron shell hosting the Worker locally
-worker/
-  index.ts                Security headers, the socket upgrade, and the retention cron
-  live-room-socket.ts     Durable Object fanning out Live Room change notifications
 docs/                     Static GitHub Pages project description
 ```
 
@@ -392,10 +380,10 @@ The primary API surfaces are:
 | `/api/trainer-studio` | Curriculum versions, review gates, publishing, and cohorts |
 | `/api/governance` | Versioned policies and audit evidence |
 | `/api/capabilities` | Claims, baselines, and workplace measurements |
-| `/api/auth` | Local account sessions and invitation acceptance |
+| `/api/auth` | Firebase Google sign-in, signed sessions, and invitation acceptance |
 | `/api/cohorts` | Enrollment, progress, scheduled sessions, interventions, and outcomes |
 | `/api/live-room` | Session access, lesson progression, presence, shared prompts, and whiteboard notes |
-| `/api/live-room/socket` | Authorized WebSocket upgrade onto a session's change channel |
+| `/api/live-room/channel` | Authorized Server-Sent Events change channel |
 | `/api/prompts` | Read-only prompt library derived from attempts and their regression evidence |
 | `/api/course` | Lesson completion and knowledge-check scores |
 | `/api/meet` | Google Meet space creation, manual link attachment, and session recap |
@@ -423,137 +411,46 @@ npm test
 git diff --check
 ```
 
-API and browser tests start the application on port `3100` and use a local D1 database. Live provider calls are not required by the automated suite.
-
-They run on a single worker and with no retries: every spec drives the same server
-and the same local SQLite file, where concurrent writers produce lock contention
-rather than useful parallelism, and a retry would hide the kind of data-dependent
-failure that only appears once the local database has grown.
-
-Note that the local database accumulates across runs, so suites that create cohorts
-or attempts exercise progressively larger id sets — which is how D1's
-bound-parameter limit gets caught (see [`app/lib/sql-chunks.ts`](./app/lib/sql-chunks.ts)).
+API and browser tests start the application on port `3100` and use the in-process
+database. Firebase Analytics is opt-in and disabled for local runs, and no provider
+credentials are configured by CI, so the suite makes no Firebase or model-provider
+calls. Tests use one worker and no retries to keep shared setup deterministic and
+surface real ordering or state bugs.
 
 `tests/api/access-control.api.spec.ts` drives two unrelated facilitators against the
 same deployment, which is the case a role-only check passes and an ownership check
 does not. The pure decisions — cross-site refusal and the request bounds — are unit
-tested in `tests/unit/cross-site.test.ts` and `tests/unit/request-limits.test.ts`,
-because under `vinext dev` the framework's own origin guard answers a cross-origin
-request before the worker sees it.
-Delete `.wrangler/` to start from an empty database.
+tested in `tests/unit/cross-site.test.ts` and `tests/unit/request-limits.test.ts`.
 
-## Desktop application
+## Firebase deployment
 
-The app also ships as a desktop application, which is the local-first way to run it:
-no deployment, no proxy, no network dependency beyond the model providers a learner
-chooses to configure.
+The Firebase configuration targets project `processbridge` and backend
+`upskill-ai-labs`. The runtime is intentionally capped in `apphosting.yaml` at zero
+idle instances and two maximum instances. Analytics remains disabled unless explicitly
+enabled. Before the first rollout:
 
-```bash
-npm run desktop          # build, then open the app
-npm run desktop:package  # build installers into release/
-```
+1. Create the default Firestore database in `us-central1` and deploy the deny-all
+   client rules.
+2. Enable Firebase Authentication's Google provider and authorize the App Hosting
+   domain.
+3. Store a random `SESSION_SECRET` with `firebase apphosting:secrets:set` and grant the
+   backend access.
+4. Create the App Hosting backend connected to this repository.
 
-**It runs the same Worker as a deployment, not a reimplementation.** The app is a
-Cloudflare Worker — it imports `cloudflare:workers` and needs D1, a Durable Object,
-and the asset fetcher — so plain Node cannot host it at all (`vinext start` fails on
-the `cloudflare:` module scheme). The desktop build therefore embeds **workerd**, via
-wrangler's programmatic worker, and points a window at it. There is no second
-backend to drift from the first.
-
-| Piece | Where |
-|---|---|
-| Window, menus, external links | [`desktop/main.mjs`](./desktop/main.mjs) |
-| Worker host (workerd, bindings, readiness) | [`desktop/runtime.mjs`](./desktop/runtime.mjs) |
-| Runtime child process | [`desktop/serve.mjs`](./desktop/serve.mjs) |
-| Credentials and limits | [`desktop/settings.mjs`](./desktop/settings.mjs) |
-
-Learner data — attempts, submissions, claims, whiteboards — lives in the platform's
-application-support directory (**File → Open Data Folder**), so it survives upgrades
-and can be backed up or deleted as ordinary files. Provider keys go in
-`settings.json` beside it (**File → Open Settings File**); nothing is bundled with
-the application.
-
-Three constraints are load-bearing, and each is commented where it applies:
-
-- **The app ships unarchived (`asar: false`).** wrangler and workerd resolve and
-  spawn real files; inside an asar archive the worker starts but never becomes
-  ready. This is why the bundle is large (~580 MB on macOS, most of it Electron and
-  workerd).
-- **The runtime runs in a child process**, not Electron's main process, so a crash
-  in the worker cannot take the window with it.
-- **`ENVIRONMENT` stays `development`.** A desktop install is one person's own
-  machine with no authenticating proxy; naming a managed environment would make the
-  app refuse every request for want of a proxy secret it can never be given. The
-  identity is the local account from `settings.json`.
-
-Meet links, and any other outward link, open in the system browser rather than in
-the app window.
-
-### Signing and notarization
-
-`npm run desktop:package` will sign with whatever Developer ID it discovers, which
-is almost certainly not what you want on a shared machine. For an unsigned local
-build:
+After those one-time steps, releases are created with:
 
 ```bash
-CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --dir
-```
-
-Signing and notarizing a distributable is deliberately left as an explicit step —
-it needs your certificates and an Apple ID, and it produces an artifact under your
-identity.
-
-### Application icon
-
-The icon is generated from the brand mark in
-[`docs/assets/labs-mark.svg`](./docs/assets/labs-mark.svg), so it cannot drift from
-the mark in the app header:
-
-```bash
-npm run icons   # writes build/icon.png and build/icon.icns
-```
-
-`build/` is where electron-builder looks by convention. The generated files are
-committed, so packaging works without rerunning the script; rerun it after editing
-the mark. The mark is inset by 8% rather than bled to the edge, because macOS
-composites app icons on a grid where full-bleed artwork reads as oversized next to
-system icons. Generating the `.icns` uses `iconutil` and therefore only works on
-macOS; the PNG covers Linux and is converted for Windows.
-
-## Deployment
-
-The app is a Cloudflare Worker with a D1 database. First time only:
-
-```bash
-npx wrangler d1 create upskill-ai-labs      # paste the id into wrangler.jsonc
-npm run db:migrate:production
-npx wrangler secret put SESSION_SECRET --env production
-npx wrangler secret put TRUSTED_PROXY_SECRET --env production
-npx wrangler secret put GEMINI_API_KEY --env production   # and any other providers
-```
-
-Then, for each release:
-
-```bash
-npm run db:migrate:production   # when the schema changed
 npm run deploy
 ```
 
-The first deploy also creates the `LiveRoomSocket` Durable Object class declared in
-`wrangler.jsonc`; no separate step is needed. If the binding is unavailable, the Live
-Room reports the channel as unavailable and falls back to timed refreshes instead of
-failing.
+App Hosting builds the native Next.js application and serves its dynamic routes from
+Cloud Run. Firestore is used only by the server. The local validation suite should be
+run before a rollout so cloud builds and live smoke checks stay minimal.
 
-`GET /api/health` reports whether the database answers and whether the identity and
-session secrets are present, without revealing their values. It returns `503` when
-anything is missing, so a load balancer will not send traffic to a runtime that
-cannot authenticate anyone.
-
-Put the app behind an authenticating reverse proxy that sets the identity headers
-described above, strips them from inbound public requests, and adds
-`x-upskill-proxy-secret`. Without `TRUSTED_PROXY_SECRET` the deployment ignores
-identity headers entirely and no one can sign in except through an invitation.
+`GET /api/health` reports database and session-secret readiness without revealing
+secret values. It returns `503` when a required dependency is unavailable.
 
 ## Project website
 
-The application runs locally. [`docs/`](./docs) contains a separate static description of the project for GitHub Pages; it does not contain a live application runtime or receive provider credentials.
+[`docs/`](./docs) contains a separate static project description for GitHub Pages; it
+does not contain the application runtime or receive provider credentials.

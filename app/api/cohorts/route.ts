@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohortEnrollments, cohortInterventions, cohorts, cohortSessions, curriculumVersions, evalResults, labAttempts, labSubmissions, organizations } from "../../../db/schema";
@@ -33,7 +33,7 @@ async function buildCohortViews(rows: Array<typeof cohorts.$inferSelect>) {
   if (!rows.length) return [];
   const db = getDb(); const ids = rows.map((row) => row.id);
   // Chunked: a facilitator accumulates cohorts over time, and one `inArray` over
-  // every id exceeds D1's bound-parameter limit. Ordering is reapplied after the
+  // every id exceeds Firestore's `in` query value limit. Ordering is reapplied after the
   // chunks are concatenated, since each query only orders its own batch.
   const enrollments = await selectInChunks(ids, (batch) =>
     db.select().from(cohortEnrollments).where(inArray(cohortEnrollments.cohortId, batch)));

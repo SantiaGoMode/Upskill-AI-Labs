@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { auditEvents, policyProfiles } from "../../db/schema";
 import type { IntakeTier } from "./redaction";

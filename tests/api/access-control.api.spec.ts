@@ -122,7 +122,7 @@ test("a malformed body is a client error rather than a server error", async ({ r
 });
 
 /**
- * End-to-end confirmation only. Under `vinext dev` the framework's own dev-origin
+ * End-to-end confirmation only. The framework's own development-origin
  * guard answers first, so the worker's check is covered by
  * `tests/unit/cross-site.test.ts` rather than by this spec.
  */

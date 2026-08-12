@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 export function cx(...values: Array<string | false | null | undefined>) {
@@ -368,5 +369,82 @@ export function Spinner({ label }: { label: string }) {
       <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-primary" aria-hidden />
       {label}
     </p>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Overlay                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Centred modal dialog.
+ *
+ * Escape and a backdrop press both dismiss. Focus moves into the panel on open
+ * and returns to whatever opened it on close, so dismissing a dialog opened from
+ * the canvas puts the keyboard back on the canvas rather than at the top of the
+ * document. The panel is the scroll container, which keeps a long artifact inside
+ * the dialog instead of scrolling the page behind it.
+ */
+export function Modal({
+  title,
+  onClose,
+  children,
+  width = "820px",
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  width?: string;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // Stopped so a dialog opened from a canvas does not also clear its selection.
+      event.stopPropagation();
+      onClose();
+    }
+
+    document.addEventListener("keydown", handleKey);
+    const restoreOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = restoreOverflow;
+      opener?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="presentation"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(0_0_0/45%)] p-4 md:p-8"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        style={{ maxWidth: width }}
+        className="max-h-[88dvh] w-full overflow-y-auto rounded-[12px] border border-line bg-raised shadow-[0_18px_50px_rgb(0_0_0/28%)] outline-none"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-raised/95 px-5 py-2.5 backdrop-blur">
+          <p className="eyebrow m-0 truncate">{title}</p>
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close dialog">
+            <span aria-hidden>✕</span>
+          </Button>
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }

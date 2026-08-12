@@ -1,5 +1,7 @@
-import { env } from "cloudflare:workers";
-import { and, eq, inArray } from "drizzle-orm";
+import { env } from "../../lib/server-env";
+import { getAuth } from "firebase-admin/auth";
+import { getAdminApp } from "../../../db/firebase-admin";
+import { and, eq, inArray } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohortEnrollments, cohorts, localSessions, localUsers, organizationMembers } from "../../../db/schema";
@@ -11,7 +13,6 @@ import {
   LOCAL_SESSION_COOKIE,
   sessionSecret,
   sessionSigningUnavailable,
-  unauthorizedResponse,
 } from "../../lib/request-identity";
 import { readJsonBody } from "../../lib/request-limits";
 import { isManagedEnvironment } from "../../lib/runtime-env";
@@ -30,18 +31,18 @@ const sessionCookie = (token: string, request: Request, maxAge: number) => {
 export async function GET(request: Request) {
   await ensureLabSchema();
   const identity = await getRequestIdentity(request);
-  if (!identity) return unauthorizedResponse();
   return Response.json({
     identity,
     // Invitations are redeemable anywhere; the passwordless developer account is not.
     sessionsAvailable: !sessionSigningUnavailable(),
     developerSignInAvailable: developerSignInAvailable(request),
+    firebaseSignInAvailable: isManagedEnvironment(),
   });
 }
 
 export async function POST(request: Request) {
   await ensureLabSchema();
-  const parsed = await readJsonBody<{ action?: "sign-in" | "sign-out"; email?: string; displayName?: string; inviteToken?: string }>(request);
+  const parsed = await readJsonBody<{ action?: "sign-in" | "sign-out" | "firebase-sign-in"; email?: string; displayName?: string; inviteToken?: string; idToken?: string }>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
   const db = getDb();
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     if (sessionId) await db.delete(localSessions).where(eq(localSessions.id, sessionId));
     return Response.json({ signedOut: true }, { headers: { "set-cookie": sessionCookie("", request, 0) } });
   }
-  if (body.action !== "sign-in") return Response.json({ error: "Unsupported action" }, { status: 400 });
+  if (body.action !== "sign-in" && body.action !== "firebase-sign-in") return Response.json({ error: "Unsupported action" }, { status: 400 });
   if (sessionSigningUnavailable()) {
     return Response.json({ error: "Accounts are unavailable until SESSION_SECRET is configured" }, { status: 503 });
   }
@@ -60,7 +61,28 @@ export async function POST(request: Request) {
   let displayName = body.displayName?.trim() || email;
   let role: "learner" | "facilitator" = "learner";
 
-  if (body.inviteToken?.trim()) {
+  if (body.action === "firebase-sign-in") {
+    if (!isManagedEnvironment()) return Response.json({ error: "Google sign-in is only enabled for the deployed app" }, { status: 403 });
+    if (!body.idToken) return Response.json({ error: "Google sign-in token is required" }, { status: 400 });
+    let token: Awaited<ReturnType<ReturnType<typeof getAuth>["verifyIdToken"]>>;
+    try {
+      token = await getAuth(getAdminApp()).verifyIdToken(body.idToken, true);
+    } catch {
+      return Response.json({ error: "Google sign-in could not be verified" }, { status: 401 });
+    }
+    email = token.email?.trim().toLowerCase() ?? "";
+    if (!email || token.email_verified !== true) {
+      return Response.json({ error: "A verified Google email is required" }, { status: 403 });
+    }
+    displayName = typeof token.name === "string" && token.name.trim() ? token.name.trim() : email;
+    const facilitators = new Set((env.FACILITATOR_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
+    const [existingUser] = await db.select().from(localUsers).where(eq(localUsers.email, email)).limit(1);
+    const [member] = await db.select().from(organizationMembers).where(eq(organizationMembers.email, email)).limit(1);
+    if (!facilitators.has(email) && existingUser?.status !== "active" && member?.status !== "active") {
+      return Response.json({ error: "This Google account has not been invited" }, { status: 403 });
+    }
+    role = facilitators.has(email) || existingUser?.role === "facilitator" || member?.role === "facilitator" ? "facilitator" : "learner";
+  } else if (body.inviteToken?.trim()) {
     const [member] = await db.select().from(organizationMembers)
       .where(and(eq(organizationMembers.inviteToken, body.inviteToken.trim()), eq(organizationMembers.status, "invited"))).limit(1);
     if (!member) return Response.json({ error: "Invitation is invalid or has already been used" }, { status: 404 });
@@ -68,8 +90,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     await db.update(organizationMembers).set({ status: "active", inviteToken: null, joinedAt: now }).where(eq(organizationMembers.id, member.id));
     const organizationCohorts = await db.select({ id: cohorts.id }).from(cohorts).where(eq(cohorts.organizationId, member.organizationId));
-    // Chunked: an established organization can hold more cohorts than D1 allows
-    // bound parameters in a single statement.
+    // Chunked to stay inside Firestore's `in` query value limit.
     for (const batch of chunkIds(organizationCohorts.map((cohort) => cohort.id))) {
       await db.update(cohortEnrollments).set({ status: "enrolled", joinedAt: now, updatedAt: now })
         .where(and(eq(cohortEnrollments.learnerEmail, email), inArray(cohortEnrollments.cohortId, batch)));

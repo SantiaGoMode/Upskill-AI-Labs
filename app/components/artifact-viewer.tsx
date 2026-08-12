@@ -1,7 +1,7 @@
 "use client";
 
 import type { LabSource, SourceKind, SourceSection } from "../lab-data";
-import { Badge, Button, cx } from "./ui";
+import { Badge, Button, Callout, cx, Modal } from "./ui";
 
 const KIND_LABEL: Record<SourceKind, string> = {
   email: "Email",
@@ -90,6 +90,48 @@ export function ArtifactViewer({
         ))}
       </div>
     </article>
+  );
+}
+
+/**
+ * The same artifact, in a dialog.
+ *
+ * Used where an artifact is referenced rather than browsed — a whiteboard card,
+ * for instance — so a reference can be read in full without leaving the surface
+ * it was referenced from. An unresolved id is reported rather than shown blank:
+ * a card can name a source that belongs to another lab, or one that was never a
+ * real source id at all.
+ */
+export function ArtifactModal({
+  source,
+  sourceId,
+  onClose,
+}: {
+  source: LabSource | null;
+  sourceId: string;
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={`Artifact · ${sourceId || "unknown source"}`} onClose={onClose}>
+      {source ? (
+        <ArtifactViewer source={source} onCite={(id) => void navigator.clipboard?.writeText(`[${id}]`)} />
+      ) : (
+        <div className="px-6 py-6 md:px-8">
+          <Callout tone="warn" title="This card does not name a source in the active lab">
+            <p className="m-0 mt-1">
+              {sourceId ? (
+                <>
+                  Nothing in the evidence pack for this lab has the id <code className="font-mono">{sourceId}</code>. The card may
+                  have been placed while another lab was active, or the id may be a placeholder.
+                </>
+              ) : (
+                <>The card carries no source id, so there is no artifact to open.</>
+              )}
+            </p>
+          </Callout>
+        </div>
+      )}
+    </Modal>
   );
 }
 

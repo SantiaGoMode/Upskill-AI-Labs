@@ -6,7 +6,8 @@ import { api, errorMessage, formatDateTime, post } from "../../lib/client-api";
 import type { Identity } from "../../lib/client-api";
 import { useLiveRoomChannel } from "../../lib/use-live-room-channel";
 import { Badge, Button, Callout, Card, cx, LinkButton, Page, Spinner } from "../../components/ui";
-import { BoardList, Whiteboard, type BoardCard, type Tool } from "../../components/whiteboard";
+import { ArtifactModal } from "../../components/artifact-viewer";
+import { artifactSourceId, BoardList, Whiteboard, type BoardCard, type Tool } from "../../components/whiteboard";
 
 type Room = {
   id: string;
@@ -87,6 +88,8 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [runError, setRunError] = useState("");
+  /** The artifact card whose source is open in a dialog, if any. */
+  const [openArtifact, setOpenArtifact] = useState<BoardCard | null>(null);
   const [provider, setProvider] = useState("gemini");
   const joined = useRef(false);
   const interacting = useRef(false);
@@ -218,6 +221,14 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
   // A failed model run is the more specific complaint, so it wins the banner.
   const banner = runError || error;
   const editedBody = editing || selected?.body || "";
+  // An artifact resolves against the lab it was placed under rather than the lab
+  // on screen, so a card left from an earlier section still opens its own source.
+  const openArtifactId = openArtifact ? artifactSourceId(openArtifact) : "";
+  const openArtifactSource = openArtifact
+    ? labs
+        .find((lab) => lab.id === (openArtifact.sectionKey ?? room?.currentLabId))
+        ?.sources.find((source) => source.id === openArtifactId) ?? null
+    : null;
 
   if (!room || room.status !== "open") {
     return (
@@ -418,6 +429,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                 void act({ action: "connect", sourceCardId, targetId }, true);
               }}
               onInteractingChange={setInteracting}
+              onOpenArtifact={setOpenArtifact}
               onCreate={(card) => void act({ action: "add-card", ...card }, true)}
               onMove={(id, x, y) => {
                 setPending((current) => ({ ...current, [id]: { x, y } }));
@@ -433,6 +445,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                 onDelete={(id) => void act({ action: "delete-card", cardId: id })}
                 onSelect={setSelectedId}
                 selectedId={selectedId}
+                onOpenArtifact={setOpenArtifact}
               />
             </div>
           )}
@@ -600,6 +613,14 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
           </aside>
         ) : null}
       </div>
+
+      {openArtifact ? (
+        <ArtifactModal
+          source={openArtifactSource}
+          sourceId={openArtifactId}
+          onClose={() => setOpenArtifact(null)}
+        />
+      ) : null}
     </div>
   );
 }

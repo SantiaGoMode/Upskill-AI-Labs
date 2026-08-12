@@ -1,13 +1,13 @@
-import { env } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
+import { and, eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { cohortEnrollments, cohorts, cohortSessions } from "../../db/schema";
 import type { RequestIdentity } from "./identity-trust";
+import { publishLiveRoomSignal } from "./live-room-signals";
 import { logWarning } from "./observability";
 
 /**
- * Who may see a Live Room. Shared by the REST route and the WebSocket upgrade in the
- * worker entry, so a socket can never be opened on a session the caller could not
+ * Who may see a Live Room. Shared by the REST route and the change channel, so a
+ * channel can never be opened on a session the caller could not
  * already read.
  */
 export async function liveRoomAccess(sessionId: string, identity: RequestIdentity) {
@@ -42,14 +42,9 @@ const SILENT_ACTIONS = new Set(["heartbeat"]);
  * fallback poll, which is not worth failing the write that already succeeded.
  */
 export async function notifyLiveRoom(sessionId: string, action: string) {
-  if (SILENT_ACTIONS.has(action) || !env.LIVE_ROOM) return;
+  if (SILENT_ACTIONS.has(action)) return;
   try {
-    const channel = env.LIVE_ROOM.get(env.LIVE_ROOM.idFromName(sessionId));
-    await channel.fetch("https://live-room/broadcast", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
+    await publishLiveRoomSignal(sessionId, action);
   } catch (error) {
     logWarning("live_room_broadcast_failed", {
       sessionId,

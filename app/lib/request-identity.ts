@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { env } from "./server-env";
+import { eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { localSessions, localUsers } from "../../db/schema";
 import { readHeaderIdentity, type RequestIdentity } from "./identity-trust";

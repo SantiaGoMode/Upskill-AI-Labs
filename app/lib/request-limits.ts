@@ -2,7 +2,7 @@
  * Bounds on what a request may carry.
  *
  * Every field a client controls that is persisted, or forwarded to a paid model
- * provider, needs a ceiling. Without one, an authenticated learner can fill D1
+ * provider, needs a ceiling. Without one, an authenticated learner can fill the database
  * with a single write or spend an account's whole daily model budget in one call:
  * the budget check refuses the *next* call after the cap is passed, so the size of
  * any individual call has to be bounded here instead.

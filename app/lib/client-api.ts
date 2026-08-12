@@ -74,9 +74,10 @@ export function useResource<T>(url: string | null) {
 
 export function useIdentity() {
   const { data, error, loading, reload } = useResource<{
-    identity: Identity;
+    identity: Identity | null;
     sessionsAvailable: boolean;
     developerSignInAvailable: boolean;
+    firebaseSignInAvailable: boolean;
   }>("/api/auth");
   return {
     identity: data?.identity ?? null,
@@ -84,6 +85,7 @@ export function useIdentity() {
     sessionsAvailable: data?.sessionsAvailable ?? false,
     /** Whether the configured developer account can sign in without a credential. */
     developerSignInAvailable: data?.developerSignInAvailable ?? false,
+    firebaseSignInAvailable: data?.firebaseSignInAvailable ?? false,
     error,
     loading,
     reload,

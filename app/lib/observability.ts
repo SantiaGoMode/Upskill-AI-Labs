@@ -1,7 +1,7 @@
 /**
  * Server-side logging and error responses.
  *
- * Logs are single-line JSON so Cloudflare's log stream stays queryable, and they
+ * Logs are single-line JSON so the managed log stream stays queryable, and they
  * never carry learner prompt text, artifact content, or source material: an
  * operator debugging a failure should not thereby read a learner's work. Every
  * failed request gets an incident id that appears both in the log line and in the
@@ -15,7 +15,7 @@ function emit(level: "info" | "warn" | "error", message: string, fields: LogFiel
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined) entry[key] = value;
   }
-  // Cloudflare captures stdout/stderr per request when observability is enabled.
+  // App Hosting captures stdout/stderr for each server request.
   const line = JSON.stringify(entry);
   if (level === "error") console.error(line);
   else if (level === "warn") console.warn(line);

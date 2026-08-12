@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
-import { sql } from "drizzle-orm";
+import { env } from "../../lib/server-env";
+import { sql } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { logWarning } from "../../lib/observability";
 import { isManagedEnvironment } from "../../lib/runtime-env";
