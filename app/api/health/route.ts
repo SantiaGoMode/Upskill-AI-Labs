@@ -23,9 +23,12 @@ export async function GET() {
   }
 
   const managed = isManagedEnvironment();
-  // Both are required for a deployment to authenticate anyone at all.
-  checks.identity = !managed || env.TRUSTED_PROXY_SECRET?.trim() ? "ok" : "missing";
+  // Firebase Authentication uses Application Default Credentials in App Hosting
+  // and needs no application-held proxy secret. Public safe reads also resolve to
+  // the viewer identity without one.
+  checks.identity = "ok";
   checks.sessions = !managed || env.SESSION_SECRET?.trim() ? "ok" : "missing";
+  checks.admin = !managed || env.ADMIN_EMAILS?.trim() ? "ok" : "missing";
 
   const healthy = Object.values(checks).every((value) => value === "ok");
   return Response.json(

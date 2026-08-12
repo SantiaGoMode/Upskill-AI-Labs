@@ -43,4 +43,7 @@ test("the health endpoint reports database and secret readiness", async ({ reque
   const body = await response.json() as { status: string; checks: Record<string, string> };
   expect(body.status).toBe("ok");
   expect(body.checks.database).toBe("ok");
+  expect(body.checks.identity).toBe("ok");
+  expect(body.checks.sessions).toBe("ok");
+  expect(body.checks.admin).toBe("ok");
 });
