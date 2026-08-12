@@ -175,5 +175,84 @@ export const demoCohorts = [
   },
 ];
 
+const liveRoomLabBySession: Record<string, { labId: string; section: string; prompt: string; sources: [[string, string], [string, string]] }> = {
+  "demo-session-coaching": {
+    labId: "lab-06",
+    section: "Run and compare",
+    prompt: "STATUS-JIG v0.7 · Reconcile the weekly pack, preserve conflicts, cite every material claim, and stop when a required source is absent.",
+    sources: [["NW-WEEK-10", "Week 10 source pack"], ["NW-WEEK-11", "Week 11 exception pack"]],
+  },
+  "demo-session-critique": {
+    labId: "lab-07",
+    section: "Evidence walkthrough",
+    prompt: "Break the executive narrative into material claims. Mark each supported, contradicted, or unsupported and cite the source record.",
+    sources: [["NW-PORTFOLIO-12", "Executive portfolio narrative"], ["NW-FINANCE-12", "Portfolio finance extract"]],
+  },
+  "demo-session-capstone": {
+    labId: "lab-08",
+    section: "Failure review",
+    prompt: "Review the regression failures by category. Identify critical blockers, the promotion owner, and a measurable rollback trigger.",
+    sources: [["NW-REGRESSION-20", "Regression-set contract"], ["NW-JUDGE-CAL-01", "Judge calibration report"]],
+  },
+};
+
+export function demoLiveRoom(sessionId: string) {
+  const cohort = demoCohorts.find((item) => item.sessions.some((session) => session.id === sessionId));
+  const session = cohort?.sessions.find((item) => item.id === sessionId);
+  const context = liveRoomLabBySession[sessionId];
+  if (!cohort || !session || !context) return null;
+
+  const [[sourceOneId, sourceOneTitle], [sourceTwoId, sourceTwoTitle]] = context.sources;
+  const artifactOne = `${sessionId}-artifact-one`;
+  const artifactTwo = `${sessionId}-artifact-two`;
+  const prompt = `${sessionId}-prompt`;
+  return {
+    session: { ...session, cohortName: cohort.name },
+    room: {
+      id: `${sessionId}-room`,
+      status: "open",
+      currentLabId: context.labId,
+      currentSection: context.section,
+      sharedPrompt: context.prompt,
+      updatedAt: NOW,
+    },
+    participants: [
+      { id: "demo-participant-facilitator", displayName: "Maya Chen", role: "facilitator", status: "present" },
+      { id: "demo-participant-self", displayName: "You", role: "learner", status: "present" },
+      { id: "demo-participant-learner", displayName: "Learner", role: "learner", status: "present" },
+    ],
+    cards: [
+      {
+        id: `${sessionId}-heading`, kind: "text", body: `Lab ${context.labId.slice(-1)} · ${context.section}`,
+        color: "ink", x: 40, y: 24, width: 520, height: 58, payload: {}, authorEmail: "Facilitator", sectionKey: context.labId,
+      },
+      {
+        id: artifactOne, kind: "artifact", body: `${sourceOneId} · ${sourceOneTitle}`,
+        color: "blue", x: 44, y: 112, width: 245, height: 88, payload: { sourceId: sourceOneId }, authorEmail: "Facilitator", sectionKey: context.labId,
+      },
+      {
+        id: artifactTwo, kind: "artifact", body: `${sourceTwoId} · ${sourceTwoTitle}`,
+        color: "blue", x: 44, y: 242, width: 245, height: 88, payload: { sourceId: sourceTwoId }, authorEmail: "Facilitator", sectionKey: context.labId,
+      },
+      {
+        id: prompt, kind: "prompt", body: context.prompt,
+        color: "green", x: 350, y: 102, width: 390, height: 205, payload: { inputs: [artifactOne, artifactTwo] }, authorEmail: "Facilitator", sectionKey: context.labId,
+      },
+      {
+        id: `${sessionId}-output`, kind: "output",
+        body: `AMBER · The records contain a material conflict and one required control result is missing. Preserve both figures, mark the control result Unknown, and escalate final status to the program owner. [${sourceOneId}] [${sourceTwoId}]`,
+        color: "green", x: 350, y: 378, width: 430, height: 220,
+        payload: { inputs: [prompt], model: "gemini-2.5-flash", usage: { totalTokens: 684 }, cost: { estimatedUsd: 0.00042 }, sourceIds: [sourceOneId, sourceTwoId] },
+        authorEmail: "Facilitator", sectionKey: context.labId,
+      },
+      {
+        id: `${sessionId}-note`, kind: "note",
+        body: "Human check: resolve the adoption metric conflict and assign the control-gate owner before publishing.",
+        color: "yellow", x: 840, y: 132, width: 230, height: 145, payload: {}, authorEmail: "Learner", sectionKey: context.labId,
+      },
+    ],
+  };
+}
+
 export const isDemoViewer = (identity: { email: string; role: string } | null | undefined) =>
   identity?.role === "viewer" && identity.email === DEMO_VIEWER_EMAIL;

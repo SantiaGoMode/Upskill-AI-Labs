@@ -132,6 +132,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
   }, [load]);
 
   const roomOpen = state?.room?.status === "open";
+  const readOnly = state?.identity.role === "viewer";
   /** Set when a change arrives mid-drag, so it is applied once the drag ends. */
   const missedChange = useRef(false);
 
@@ -144,10 +145,10 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
     void load();
   }, [load]);
 
-  const { connected } = useLiveRoomChannel(sessionId, { enabled: Boolean(roomOpen), onChange: refresh });
+  const { connected } = useLiveRoomChannel(sessionId, { enabled: Boolean(roomOpen && !readOnly), onChange: refresh });
 
   useEffect(() => {
-    if (!roomOpen) return;
+    if (!roomOpen || readOnly) return;
     if (!joined.current) {
       joined.current = true;
       void act({ action: "join" }, true);
@@ -158,14 +159,14 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
       if (!interacting.current) void act({ action: "heartbeat" }, true);
     }, PRESENCE_MS);
     return () => window.clearInterval(presence);
-  }, [act, roomOpen]);
+  }, [act, readOnly, roomOpen]);
 
   useEffect(() => {
     // Only while the channel is down: the room must not silently go stale.
-    if (!roomOpen || connected) return;
+    if (!roomOpen || readOnly || connected) return;
     const poll = window.setInterval(refresh, FALLBACK_POLL_MS);
     return () => window.clearInterval(poll);
-  }, [connected, refresh, roomOpen]);
+  }, [connected, readOnly, refresh, roomOpen]);
 
   const setInteracting = useCallback((value: boolean) => {
     interacting.current = value;
@@ -269,6 +270,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
       <RoomHeader
         session={session}
         room={room}
+        preview={readOnly}
         busy={busy}
         onClose={facilitator ? () => void act({ action: "close-room" }) : undefined}
       />
@@ -306,7 +308,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
             </select>
           </div>
         ) : (
-          <Badge tone="info">Facilitator controlled</Badge>
+          <Badge tone={readOnly ? "warn" : "info"}>{readOnly ? "Read-only room preview" : "Facilitator controlled"}</Badge>
         )}
       </div>
 
@@ -319,41 +321,50 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-raised px-4 py-2">
-            <div className="flex items-center gap-1" role="toolbar" aria-label="Whiteboard tools">
-              {TOOLS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  title={item.hint}
-                  aria-pressed={tool === item.id}
-                  onClick={() => setTool(item.id)}
-                  className={cx(
-                    "grid h-8 min-w-[34px] place-items-center rounded-[7px] border px-2 text-[13px] font-semibold transition-colors",
-                    tool === item.id ? "border-primary bg-primary text-primary-fg" : "border-line text-muted hover:bg-inset hover:text-fg",
-                  )}
-                >
-                  <span aria-hidden>{item.glyph}</span>
-                  <span className="sr-only">{item.label}</span>
-                </button>
-              ))}
-            </div>
+            {readOnly ? (
+              <div className="flex items-center gap-2">
+                <Badge tone="warn">Read only</Badge>
+                <p className="text-[12.5px] text-muted">Pan, zoom, inspect artifacts, and switch to the accessible list view.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-1" role="toolbar" aria-label="Whiteboard tools">
+                  {TOOLS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      title={item.hint}
+                      aria-pressed={tool === item.id}
+                      onClick={() => setTool(item.id)}
+                      className={cx(
+                        "grid h-8 min-w-[34px] place-items-center rounded-[7px] border px-2 text-[13px] font-semibold transition-colors",
+                        tool === item.id ? "border-primary bg-primary text-primary-fg" : "border-line text-muted hover:bg-inset hover:text-fg",
+                      )}
+                    >
+                      <span aria-hidden>{item.glyph}</span>
+                      <span className="sr-only">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
 
-            <div className="flex items-center gap-1.5">
-              {Object.entries(COLORS).map(([item, swatch]) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-label={`${item} ink colour`}
-                  aria-pressed={color === item}
-                  onClick={() => setColor(item)}
-                  className={cx(
-                    "h-6 w-6 rounded-full border-2 transition-transform",
-                    color === item ? "scale-110 border-fg" : "border-line",
-                    swatch,
-                  )}
-                />
-              ))}
-            </div>
+                <div className="flex items-center gap-1.5">
+                  {Object.entries(COLORS).map(([item, swatch]) => (
+                    <button
+                      key={item}
+                      type="button"
+                      aria-label={`${item} ink colour`}
+                      aria-pressed={color === item}
+                      onClick={() => setColor(item)}
+                      className={cx(
+                        "h-6 w-6 rounded-full border-2 transition-transform",
+                        color === item ? "scale-110 border-fg" : "border-line",
+                        swatch,
+                      )}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="ml-auto flex items-center gap-2">
               {facilitator && selected && (selected.kind === "prompt" || selected.kind === "workflow") ? (
@@ -378,7 +389,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                   </Button>
                 </>
               ) : null}
-              {selected ? (
+              {!readOnly && selected ? (
                 <Button size="sm" variant="danger" onClick={() => void act({ action: "delete-card", cardId: selected.id })}>
                   Delete
                 </Button>
@@ -413,7 +424,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
           {boardMode === "canvas" ? (
             <Whiteboard
               cards={positioned}
-              canEdit
+              canEdit={!readOnly}
               tool={tool}
               color={color}
               selectedId={selectedId}
@@ -424,25 +435,27 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
               connectFrom={tool === "connect" ? connectFrom : null}
               runningId={runningId}
               onConnect={(sourceCardId, targetId) => {
+                if (readOnly) return;
                 setConnectFrom(null);
                 setSelectedId(null);
                 void act({ action: "connect", sourceCardId, targetId }, true);
               }}
               onInteractingChange={setInteracting}
               onOpenArtifact={setOpenArtifact}
-              onCreate={(card) => void act({ action: "add-card", ...card }, true)}
+              onCreate={(card) => { if (!readOnly) void act({ action: "add-card", ...card }, true); }}
               onMove={(id, x, y) => {
+                if (readOnly) return;
                 setPending((current) => ({ ...current, [id]: { x, y } }));
                 void act({ action: "move-card", cardId: id, x, y }, true);
               }}
-              onDelete={(id) => void act({ action: "delete-card", cardId: id }, true)}
+              onDelete={(id) => { if (!readOnly) void act({ action: "delete-card", cardId: id }, true); }}
             />
           ) : (
             <div className="flex-1 overflow-y-auto bg-bg">
               <BoardList
                 cards={cards}
-                canEdit
-                onDelete={(id) => void act({ action: "delete-card", cardId: id })}
+                canEdit={!readOnly}
+                onDelete={(id) => { if (!readOnly) void act({ action: "delete-card", cardId: id }); }}
                 onSelect={setSelectedId}
                 selectedId={selectedId}
                 onOpenArtifact={setOpenArtifact}
@@ -464,7 +477,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                   {facilitator ? "Share a prompt to put it in front of everyone." : "Nothing shared yet."}
                 </p>
               )}
-              {room.sharedPrompt ? (
+              {room.sharedPrompt && !readOnly ? (
                 <Button
                   size="sm"
                   className="mt-2 w-full"
@@ -504,7 +517,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
               ) : null}
             </section>
 
-            {selected && selected.kind !== "ink" ? (
+            {!readOnly && selected && selected.kind !== "ink" ? (
               <section className="border-b border-line px-4 py-4">
                 <p className="eyebrow mb-2">Edit {selected.kind}</p>
                 <textarea
@@ -530,7 +543,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
               </section>
             ) : null}
 
-            <section className="border-b border-line px-4 py-4">
+            {!readOnly ? <section className="border-b border-line px-4 py-4">
               <p className="eyebrow mb-2">Quick artifacts</p>
               <p className="mb-2 text-[12.5px] text-muted">Drop a source from the active lab onto the canvas.</p>
               <div className="flex flex-wrap gap-1.5">
@@ -560,7 +573,7 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                   </button>
                 ))}
               </div>
-            </section>
+            </section> : null}
 
             <section className="border-b border-line px-4 py-4">
               <p className="eyebrow mb-2">Executable canvas</p>
@@ -571,14 +584,18 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
                 <li>4. Chain workflow steps and press Run chain to execute the whole thing.</li>
               </ol>
               {!facilitator ? (
-                <p className="mt-2 text-[12px] text-muted">Only the facilitator can run the class model.</p>
+                <p className="mt-2 text-[12px] text-muted">
+                  {readOnly ? "The demo shows the complete workflow and its existing output; running or changing it requires an assigned role." : "Only the facilitator can run the class model."}
+                </p>
               ) : null}
             </section>
 
             <section className="px-4 py-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="eyebrow m-0">In the room · {participants.length}</p>
-                {roomOpen ? (
+                {roomOpen ? readOnly ? (
+                  <span role="status" className="text-[10.5px] uppercase tracking-wide text-subtle">Preview</span>
+                ) : (
                   <span
                     role="status"
                     aria-label={connected ? "Live connection active" : "Live connection reconnecting"}
@@ -628,11 +645,13 @@ function LiveRoom({ sessionId }: { sessionId: string }) {
 function RoomHeader({
   session,
   room,
+  preview,
   onClose,
   busy,
 }: {
   session: RoomState["session"];
   room: Room | null;
+  preview?: boolean;
   onClose?: () => void;
   busy?: boolean;
 }) {
@@ -648,8 +667,8 @@ function RoomHeader({
       <div className="flex flex-wrap items-center gap-2.5">
         {room?.status === "open" ? (
           <span className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.1em] text-[color:var(--brand-mint)]">
-            <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-signal" />
-            Live
+            <span aria-hidden className={cx("h-2 w-2 rounded-full bg-signal", !preview && "animate-pulse")} />
+            {preview ? "Read-only preview" : "Live"}
           </span>
         ) : null}
         {session.meetingUri ? (

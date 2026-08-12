@@ -37,10 +37,21 @@ test("public demo looks like an active course but cannot change its record", asy
   await expect(page.getByRole("heading", { name: "The tools you built" })).toBeVisible();
   await expect(page.getByText("STATUS-JIG v0.7", { exact: false })).toBeVisible();
 
+  const liveRoomWrites: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/live-room") liveRoomWrites.push(request.url());
+  });
   await page.goto("/room/demo-session-coaching");
   await expect(page.getByText("Lab 6 coaching studio")).toBeVisible();
-  await expect(page.getByText(/Waiting for the facilitator/)).toBeVisible();
+  await expect(page.getByText("Read-only room preview", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/STATUS-JIG v0.7/).first()).toBeVisible();
+  await expect(page.getByText("Model output", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Waiting for the facilitator/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /open live room/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /run|delete|add to canvas/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "List" }).click();
+  await expect(page.getByText(/NW-WEEK-10 · Week 10 source pack/)).toBeVisible();
+  expect(liveRoomWrites).toEqual([]);
 
   await page.goto("/course/m1/m1-l5");
   await expect(page.getByText(/answers and submission are disabled in read-only mode/)).toBeVisible();

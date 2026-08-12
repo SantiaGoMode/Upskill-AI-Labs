@@ -282,7 +282,14 @@ export function Whiteboard({
                 running={runningId === card.id}
                 canEdit={canEdit}
                 onPointerDown={(event) => {
-                  if (!canEdit || tool === "ink") return;
+                  if (!canEdit) {
+                    if (card.kind === "artifact") {
+                      event.stopPropagation();
+                      onOpenArtifact?.(card);
+                    }
+                    return;
+                  }
+                  if (tool === "ink") return;
                   event.stopPropagation();
                   if (tool === "erase") {
                     onDelete(card.id);
