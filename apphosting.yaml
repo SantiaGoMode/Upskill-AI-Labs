@@ -10,8 +10,8 @@ env:
     value: production
     availability:
       - RUNTIME
-  - variable: FACILITATOR_EMAILS
-    secret: FACILITATOR_EMAILS
+  - variable: ADMIN_EMAILS
+    secret: ADMIN_EMAILS
     availability:
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED

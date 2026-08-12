@@ -6,6 +6,7 @@ import {
   secretsMatch,
 } from "../../app/lib/identity-trust";
 import { createSessionToken, readSessionToken } from "../../app/lib/session-token";
+import { publicDemoIdentity } from "../../app/lib/request-identity";
 
 const identityHeaders = (extra: Record<string, string> = {}) => new Headers({
   "oai-authenticated-user-email": "Learner@Example.com",
@@ -67,6 +68,20 @@ describe("upstream identity trust", () => {
     expect(secretsMatch("abcdef", "abcdeg")).toBe(false);
     expect(secretsMatch("abc", "abcdef")).toBe(false);
     expect(secretsMatch("", "")).toBe(true);
+  });
+});
+
+describe("public demo identity", () => {
+  it("exists only for safe requests in a managed environment", () => {
+    const view = publicDemoIdentity(new Request("https://demo.example/course", { method: "GET" }), true);
+    expect(view).toEqual({
+      email: "public-demo@upskill.invalid",
+      displayName: "Demo visitor",
+      source: "public-demo",
+      role: "viewer",
+    });
+    expect(publicDemoIdentity(new Request("https://demo.example/api/attempts", { method: "POST" }), true)).toBeNull();
+    expect(publicDemoIdentity(new Request("http://localhost:3000/course", { method: "GET" }), false)).toBeNull();
   });
 });
 

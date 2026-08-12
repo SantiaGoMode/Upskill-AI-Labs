@@ -9,7 +9,7 @@ import { selectInChunks } from "./sql-chunks";
  * A facilitator owns an organization and the cohorts under it, and every learner
  * reaches the application through an invitation into one of those cohorts. So
  * "which learners may this facilitator see?" has one answer: the ones enrolled in
- * a cohort they own. `role === "facilitator"` establishes *that* someone is a
+ * a cohort they own. Facilitator-level access establishes *that* someone is a
  * trainer, never *whose* learners they are; anything keyed only on the role would
  * expose one organization's learner work to another's trainer.
  *

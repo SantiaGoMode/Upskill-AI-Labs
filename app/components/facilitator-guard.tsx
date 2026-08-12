@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useIdentity } from "../lib/client-api";
+import { isFacilitator, useIdentity } from "../lib/client-api";
 import { Callout, LinkButton, Page, Spinner } from "./ui";
 
 /**
@@ -20,7 +20,7 @@ export function FacilitatorGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (identity?.role !== "facilitator") {
+  if (!isFacilitator(identity)) {
     return (
       <Page>
         <Callout tone="warn" title="Facilitator access required">

@@ -134,9 +134,18 @@ Passwordless sign-in as the configured developer account works only on localhost
 
 The deployed app uses Firebase Authentication with Google sign-in. The Next.js server
 verifies the Firebase ID token and then issues a signed, HTTP-only session cookie so
-normal API calls and the Live Room event stream share the same identity. The addresses
-in `FACILITATOR_EMAILS` receive facilitator access; other Google accounts must already
-have an active invitation or membership.
+normal API calls and the Live Room event stream share the same identity. A visitor who
+has not signed in receives a synthetic `viewer` identity for safe read requests only.
+That role can browse the curriculum, lessons, lab briefs, and evidence artifacts, but
+cannot answer quizzes, start or submit labs, update progress, or call any state-changing
+API.
+
+Administrator addresses are bootstrapped from the `ADMIN_EMAILS` Secret Manager
+binding. No administrator address is checked into the repository. An administrator
+can use `/admin` to add or update Google accounts as students or facilitators and to
+disable or reactivate them. Disabled accounts have their active app sessions removed.
+An optional `FACILITATOR_EMAILS` environment value remains available for deployments
+that need a separately bootstrapped facilitator list.
 
 `SESSION_SECRET` signs account session cookies and is stored in Google Secret Manager
 through the App Hosting secret binding in `apphosting.yaml`. A managed environment
@@ -166,8 +175,12 @@ Every surface has its own URL, and the main navigation is filtered by the signed
 | Live Room | `/room/<sessionId>` | Facilitator and enrolled learners |
 | Calibration and appeals | `/review` | Facilitator |
 | Governance | `/governance` | Facilitator |
+| User administration | `/admin` | Administrator |
 
-Facilitator routes are hidden from a learner's navigation and additionally rejected by the API, so hiding the link is a convenience rather than the access control itself.
+Facilitator routes are available to facilitators and administrators. They are hidden
+from student and viewer navigation and additionally rejected by the API, so hiding a
+link is a convenience rather than the access control itself. Viewer identities are
+also rejected before every state-changing handler.
 
 ## Data and persistence
 
@@ -258,9 +271,9 @@ handler.
 
 ### One facilitator cannot see another's learners
 
-A facilitator owns an organization and the cohorts under it, and every learner
+A facilitator or administrator owns an organization and the cohorts under it, and every learner
 arrives through an invitation into one of those cohorts. `role === "facilitator"`
-therefore establishes *that* someone is a trainer, never *whose* learners they are;
+or administrator access therefore establishes *that* someone is a trainer, never *whose* learners they are;
 any check keyed on the role alone would show one organization's learner work to
 another organization's trainer.
 

@@ -1,7 +1,7 @@
 import { and, eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { cohortEnrollments, cohorts, cohortSessions } from "../../db/schema";
-import type { RequestIdentity } from "./identity-trust";
+import { hasFacilitatorAccess, type RequestIdentity } from "./identity-trust";
 import { publishLiveRoomSignal } from "./live-room-signals";
 import { logWarning } from "./observability";
 
@@ -27,7 +27,7 @@ export async function liveRoomAccess(sessionId: string, identity: RequestIdentit
     .where(eq(cohortSessions.id, sessionId)).limit(1);
   if (!session) return null;
 
-  const facilitator = identity.role === "facilitator" && session.ownerEmail === identity.email;
+  const facilitator = hasFacilitatorAccess(identity) && session.ownerEmail === identity.email;
   const [enrollment] = facilitator ? [] : await db.select().from(cohortEnrollments)
     .where(and(eq(cohortEnrollments.cohortId, session.cohortId), eq(cohortEnrollments.learnerEmail, identity.email))).limit(1);
   return facilitator || enrollment ? { session, facilitator } : null;

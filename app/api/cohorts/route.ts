@@ -4,6 +4,7 @@ import { ensureLabSchema } from "../../../db/runtime";
 import { cohortEnrollments, cohortInterventions, cohorts, cohortSessions, curriculumVersions, evalResults, labAttempts, labSubmissions, organizations } from "../../../db/schema";
 import { ensureFacilitatorOrganization, inviteCohortLearners } from "../../lib/cohort-operations";
 import { recordAudit } from "../../lib/governance";
+import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { byText, byTextDesc, selectInChunks } from "../../lib/sql-chunks";
 import { readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
@@ -64,7 +65,7 @@ async function buildCohortViews(rows: Array<typeof cohorts.$inferSelect>) {
 export async function GET(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const db = getDb();
-  if (identity.role === "facilitator") {
+  if (hasFacilitatorAccess(identity)) {
     const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);
     const rows = await db.select().from(cohorts).where(eq(cohorts.ownerEmail, identity.email)).orderBy(desc(cohorts.createdAt));
     return Response.json({ identity, organization, cohorts: await buildCohortViews(rows) });
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
-  if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+  if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
   const parsed = await readJsonBody<Record<string, unknown>>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body; const action = String(body.action ?? ""); const db = getDb();

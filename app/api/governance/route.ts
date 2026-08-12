@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { auditEvents, policyProfiles } from "../../../db/schema";
 import { activePolicy, defaultPolicy, providerIds, recordAudit, toPolicy } from "../../lib/governance";
+import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { boundedText, readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 import { purgeExpiredPromptData, retentionPreview } from "../../lib/retention";
@@ -15,7 +16,7 @@ const boundedRules = (value: unknown, fallback: string[]) =>
 export async function GET(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   const policy = await activePolicy();
-  if (identity.role !== "facilitator") return Response.json({ policy });
+  if (!hasFacilitatorAccess(identity)) return Response.json({ policy });
   const profiles = (await getDb().select().from(policyProfiles).orderBy(desc(policyProfiles.version))).map(toPolicy);
   // The trail is scoped to this facilitator and the learners they are
   // responsible for. Read unscoped it names another organization's people and
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
-  if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+  if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
   const parsed = await readJsonBody<Record<string, unknown>>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;

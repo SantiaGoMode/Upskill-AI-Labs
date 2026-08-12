@@ -18,6 +18,7 @@ import { readJsonBody } from "../../lib/request-limits";
 import { isManagedEnvironment } from "../../lib/runtime-env";
 import { chunkIds } from "../../lib/sql-chunks";
 import { createSessionToken, readSessionToken } from "../../lib/session-token";
+import type { IdentityRole } from "../../lib/identity-trust";
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
 
   let email = body.email?.trim().toLowerCase() ?? "";
   let displayName = body.displayName?.trim() || email;
-  let role: "learner" | "facilitator" = "learner";
+  let role: Exclude<IdentityRole, "viewer"> = "learner";
 
   if (body.action === "firebase-sign-in") {
     if (!isManagedEnvironment()) return Response.json({ error: "Google sign-in is only enabled for the deployed app" }, { status: 403 });
@@ -75,17 +76,28 @@ export async function POST(request: Request) {
       return Response.json({ error: "A verified Google email is required" }, { status: 403 });
     }
     displayName = typeof token.name === "string" && token.name.trim() ? token.name.trim() : email;
+    const admins = new Set((env.ADMIN_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
     const facilitators = new Set((env.FACILITATOR_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
     const [existingUser] = await db.select().from(localUsers).where(eq(localUsers.email, email)).limit(1);
     const [member] = await db.select().from(organizationMembers).where(eq(organizationMembers.email, email)).limit(1);
-    if (!facilitators.has(email) && existingUser?.status !== "active" && member?.status !== "active") {
+    if (existingUser?.status === "disabled" && !admins.has(email)) {
+      return Response.json({ error: "This account has been disabled" }, { status: 403 });
+    }
+    if (!admins.has(email) && !facilitators.has(email) && existingUser?.status !== "active" && member?.status !== "active") {
       return Response.json({ error: "This Google account has not been invited" }, { status: 403 });
     }
-    role = facilitators.has(email) || existingUser?.role === "facilitator" || member?.role === "facilitator" ? "facilitator" : "learner";
+    role = admins.has(email)
+      ? "admin"
+      : facilitators.has(email) || existingUser?.role === "facilitator" || member?.role === "facilitator"
+        ? "facilitator"
+        : "learner";
+    displayName = existingUser?.displayName || displayName;
   } else if (body.inviteToken?.trim()) {
     const [member] = await db.select().from(organizationMembers)
       .where(and(eq(organizationMembers.inviteToken, body.inviteToken.trim()), eq(organizationMembers.status, "invited"))).limit(1);
     if (!member) return Response.json({ error: "Invitation is invalid or has already been used" }, { status: 404 });
+    const [existingUser] = await db.select().from(localUsers).where(eq(localUsers.email, member.email)).limit(1);
+    if (existingUser?.status === "disabled") return Response.json({ error: "This account has been disabled" }, { status: 403 });
     email = member.email; displayName = member.displayName; role = member.role === "facilitator" ? "facilitator" : "learner";
     const now = new Date().toISOString();
     await db.update(organizationMembers).set({ status: "active", inviteToken: null, joinedAt: now }).where(eq(organizationMembers.id, member.id));
@@ -102,8 +114,13 @@ export async function POST(request: Request) {
     }
     const configuredEmail = configuredDeveloperEmail();
     const [existing] = await db.select().from(localUsers).where(eq(localUsers.email, email)).limit(1);
+    if (existing?.status === "disabled") return Response.json({ error: "This account has been disabled" }, { status: 403 });
     if (!email || email !== configuredEmail && !existing) return Response.json({ error: "Use the configured local account or a valid invitation" }, { status: 403 });
-    role = existing?.role === "facilitator" || email === configuredEmail && env.LOCAL_DEV_ROLE !== "learner" ? "facilitator" : "learner";
+    role = existing?.role === "admin"
+      ? "admin"
+      : existing?.role === "facilitator" || email === configuredEmail && env.LOCAL_DEV_ROLE !== "learner"
+        ? "facilitator"
+        : "learner";
     displayName = body.displayName?.trim() || existing?.displayName || (email === configuredEmail ? "Local facilitator" : email);
   }
 

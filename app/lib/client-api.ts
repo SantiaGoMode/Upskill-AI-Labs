@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 export type Identity = {
   email: string;
   displayName: string;
-  role: "learner" | "facilitator";
-  source: "trusted-header" | "local-session" | "local";
+  role: "viewer" | "learner" | "facilitator" | "admin";
+  source: "trusted-header" | "local-session" | "local" | "public-demo";
 };
 
 export class ApiError extends Error {
@@ -92,7 +92,9 @@ export function useIdentity() {
   };
 }
 
-export const isFacilitator = (identity: Identity | null) => identity?.role === "facilitator";
+export const isFacilitator = (identity: Identity | null) => identity?.role === "facilitator" || identity?.role === "admin";
+export const isAdmin = (identity: Identity | null) => identity?.role === "admin";
+export const isViewer = (identity: Identity | null) => identity?.role === "viewer";
 
 export function formatCost(value: number | null | undefined) {
   if (value === null || value === undefined) return "Unmetered";

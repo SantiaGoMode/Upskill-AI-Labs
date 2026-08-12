@@ -13,9 +13,9 @@ import {
   LAB_TIMEBOX_SECONDS,
   type Lab,
 } from "../lib/labs";
-import { api, errorMessage, formatClock, post } from "../lib/client-api";
+import { api, errorMessage, formatClock, isViewer, post, useIdentity } from "../lib/client-api";
 import { moduleForLab } from "../content/course";
-import { Badge, Button, Callout, cx, Meter } from "./ui";
+import { Badge, Button, Callout, Card, cx, LinkButton, Meter, Spinner } from "./ui";
 import { ArtifactViewer } from "./artifact-viewer";
 import {
   BriefStage,
@@ -49,6 +49,104 @@ type AttemptResponse = {
 };
 
 export function LabRunner({ lab }: { lab: Lab }) {
+  const { identity, loading } = useIdentity();
+  if (loading) return <div className="mx-auto w-full max-w-[1180px] px-6 py-10"><Spinner label="Loading lab…" /></div>;
+  if (isViewer(identity)) return <ReadOnlyLabPreview lab={lab} />;
+  return <InteractiveLabRunner lab={lab} />;
+}
+
+function ReadOnlyLabPreview({ lab }: { lab: Lab }) {
+  const [activeSourceId, setActiveSourceId] = useState(lab.sources[0]?.id ?? "");
+  const activeSource = lab.sources.find((source) => source.id === activeSourceId) ?? lab.sources[0];
+  const currentIndex = labs.findIndex((item) => item.id === lab.id);
+  const previous = currentIndex > 0 ? labs[currentIndex - 1] : null;
+  const next = currentIndex >= 0 && currentIndex < labs.length - 1 ? labs[currentIndex + 1] : null;
+  const context = moduleForLab(lab.id);
+
+  return (
+    <div className="flex min-h-[calc(100dvh-60px)] flex-col">
+      <LabRail currentId={lab.id} />
+      <section className="bg-forest px-6 py-7 text-white md:px-8">
+        <div className="mx-auto w-full max-w-[1180px]">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Badge tone="warn">Read-only demo</Badge>
+            <span className="font-mono text-[12px] opacity-80">Lab {lab.number} of {labs.length} · {lab.play}</span>
+          </div>
+          <h1 className="text-[clamp(26px,3.2vw,40px)] font-bold">{lab.title}</h1>
+          <p className="mt-3 max-w-[72ch] text-[15px] leading-relaxed text-white/80">{lab.summary}</p>
+        </div>
+      </section>
+
+      <div className="mx-auto w-full max-w-[1180px] px-6 py-8 md:px-8">
+        <Callout tone="info">
+          You can inspect the brief and every source artifact. Timers, drafting, model runs, submissions, and progress updates require an assigned account.
+        </Callout>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <Card className="p-5">
+            <p className="eyebrow mb-2">The situation</p>
+            <p className="m-0 text-[15px] leading-relaxed">{lab.brief}</p>
+          </Card>
+          <Card className="p-5">
+            <p className="eyebrow mb-2">What the learner hands in</p>
+            <p className="m-0 text-[15px] leading-relaxed">{lab.deliverable}</p>
+          </Card>
+        </div>
+
+        {lab.steps.length ? (
+          <section className="mt-8">
+            <h2 className="mb-3 text-[20px] font-bold">How the lab works</h2>
+            <ol className="grid list-none gap-2 p-0 md:grid-cols-2">
+              {lab.steps.map((step, index) => (
+                <Card as="li" key={step} className="grid grid-cols-[28px_1fr] gap-3 px-4 py-3">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-inset text-[12px] font-bold text-muted">{index + 1}</span>
+                  <span className="text-[14px] leading-relaxed">{step}</span>
+                </Card>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+
+        <section className="mt-8 overflow-hidden rounded-[12px] border border-line bg-raised">
+          <header className="border-b border-line px-5 py-4">
+            <p className="eyebrow mb-1">Evidence pack</p>
+            <h2 className="text-[20px] font-bold">View the existing demo artifacts</h2>
+          </header>
+          <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
+            <nav aria-label="Lab sources" className="grid content-start gap-1 border-b border-line bg-inset p-3 lg:border-b-0 lg:border-r">
+              {lab.sources.map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => setActiveSourceId(source.id)}
+                  aria-current={activeSource?.id === source.id ? "page" : undefined}
+                  className={cx(
+                    "rounded-[8px] px-3 py-2.5 text-left",
+                    activeSource?.id === source.id ? "bg-raised shadow-[inset_3px_0_var(--accent)]" : "hover:bg-raised/60",
+                  )}
+                >
+                  <span className="block font-mono text-[11px] text-subtle">{source.id}</span>
+                  <span className="mt-0.5 block text-[13px] font-semibold">{source.title}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="min-w-0">{activeSource ? <ArtifactViewer source={activeSource} /> : null}</div>
+          </div>
+        </section>
+
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
+          <div className="flex flex-wrap gap-2">
+            {previous ? <LinkButton variant="ghost" href={`/lab/${previous.id}`}>← Previous lab</LinkButton> : null}
+            {context ? <LinkButton variant="ghost" href={`/course/${context.courseModule.id}`}>Back to module</LinkButton> : null}
+          </div>
+          {next ? <LinkButton variant="primary" href={`/lab/${next.id}`}>Next lab →</LinkButton> : <LinkButton variant="primary" href="/course">Back to course</LinkButton>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InteractiveLabRunner({ lab }: { lab: Lab }) {
   const storageKey = `upskill-ai-labs:${lab.id}`;
   const blankDraft = useMemo(() => emptyDraftFor(lab), [lab]);
 

@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohorts, cohortSessions } from "../../../db/schema";
 import { recordAudit } from "../../lib/governance";
+import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import {
   createMeetSpace,
   fetchMeetRecap,
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     await ensureLabSchema();
     const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
-    if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+    if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
 
     const parsed = await readJsonBody<{ action?: string; sessionId?: string; meetingUri?: string }>(request);
     if (!parsed.ok) return parsed.response;

@@ -7,6 +7,7 @@ import { assertModelBudget, budgetErrorResponse, ModelBudgetError, recordModelUs
 import { estimateModelCost } from "../../lib/model-pricing";
 import { executeModelProvider, getProviderStatuses, ProviderError } from "../../lib/model-providers";
 import { serverErrorResponse } from "../../lib/observability";
+import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { isModelProvider, type ModelProvider } from "../../lib/model-run-types";
 import { boundedText, readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
@@ -104,7 +105,7 @@ export async function GET(request: Request) {
   if (!identity) return unauthorizedResponse();
   const search = new URL(request.url).searchParams;
   if (search.get("dashboard") === "1") {
-    if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+    if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
     return Response.json(await dashboard(identity.email));
   }
   const attemptId = search.get("attemptId");
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
       const [appeal] = await getDb().insert(scoreAppeals).values({ id: crypto.randomUUID(), submissionId: body.submissionId, ownerEmail: identity.email, reason: boundedText(body.rationale, 4000).trim() }).returning();
       return Response.json({ appeal }, { status: 201 });
     }
-    if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+    if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
 
     if (body.action === "human-review") {
       if (!body.submissionId || !body.rationale?.trim() || !body.bands || rubricDimensions.some((dimension) => !isRubricBand(body.bands?.[dimension]))) {

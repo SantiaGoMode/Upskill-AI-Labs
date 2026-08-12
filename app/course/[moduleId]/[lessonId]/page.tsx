@@ -7,7 +7,7 @@ import { adjacentLessons, lessonById, lessonHref, moduleById } from "../../../co
 import { LESSON_KIND_LABEL, type QuizQuestion } from "../../../content/schema";
 import { Blocks } from "../../../content/blocks";
 import { useCourseProgress } from "../../../lib/use-progress";
-import { errorMessage } from "../../../lib/client-api";
+import { errorMessage, isViewer, useIdentity } from "../../../lib/client-api";
 import { Badge, Button, Callout, Card, cx, LinkButton, Page, Spinner } from "../../../components/ui";
 
 export default function LessonPage({ params }: { params: Promise<{ moduleId: string; lessonId: string }> }) {
@@ -17,11 +17,13 @@ export default function LessonPage({ params }: { params: Promise<{ moduleId: str
   if (!courseModule || !lesson) notFound();
 
   const { byLesson, complete, loading } = useCourseProgress();
+  const { identity, loading: identityLoading } = useIdentity();
   const { previous, next } = adjacentLessons(moduleId, lessonId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const done = byLesson.has(lesson.id);
+  const readOnly = isViewer(identity);
 
   async function markComplete(score?: number) {
     setBusy(true);
@@ -67,12 +69,19 @@ export default function LessonPage({ params }: { params: Promise<{ moduleId: str
         </Callout>
       ) : null}
 
-      {loading ? <Spinner label="Loading…" /> : null}
+      {loading || identityLoading ? <Spinner label="Loading…" /> : null}
 
       {lesson.blocks ? <Blocks blocks={lesson.blocks} /> : null}
 
       {lesson.kind === "check" && lesson.questions ? (
-        <Quiz questions={lesson.questions} onPass={(score) => void markComplete(score)} busy={busy} />
+        <Quiz questions={lesson.questions} onPass={(score) => void markComplete(score)} busy={busy} readOnly={readOnly} />
+      ) : null}
+
+      {lesson.kind === "check" && readOnly ? (
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
+          {previous ? <LinkButton variant="ghost" href={lessonHref(previous)}>← Previous</LinkButton> : <span />}
+          <LinkButton variant="primary" href={nextHref}>{next ? "Next lesson →" : "Back to module"}</LinkButton>
+        </div>
       ) : null}
 
       {lesson.kind !== "check" ? (
@@ -85,7 +94,7 @@ export default function LessonPage({ params }: { params: Promise<{ moduleId: str
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {done ? (
+            {done || readOnly ? (
               <LinkButton variant="primary" href={nextHref}>
                 {next ? "Next lesson →" : "Back to module"}
               </LinkButton>
@@ -108,7 +117,17 @@ export default function LessonPage({ params }: { params: Promise<{ moduleId: str
   );
 }
 
-function Quiz({ questions, onPass, busy }: { questions: QuizQuestion[]; onPass: (score: number) => void; busy: boolean }) {
+function Quiz({
+  questions,
+  onPass,
+  busy,
+  readOnly,
+}: {
+  questions: QuizQuestion[];
+  onPass: (score: number) => void;
+  busy: boolean;
+  readOnly: boolean;
+}) {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
@@ -123,6 +142,9 @@ function Quiz({ questions, onPass, busy }: { questions: QuizQuestion[]; onPass: 
 
   return (
     <section className="mt-8 grid gap-4">
+      {readOnly ? (
+        <Callout tone="info">This quiz is visible for demonstration, but answers and submission are disabled in read-only mode.</Callout>
+      ) : null}
       {questions.map((question, index) => {
         const chosen = answers[question.id];
         const correct = chosen === question.answer;
@@ -140,14 +162,16 @@ function Quiz({ questions, onPass, busy }: { questions: QuizQuestion[]; onPass: 
                   <button
                     key={option}
                     type="button"
-                    disabled={submitted}
+                    disabled={submitted || readOnly}
                     onClick={() => setAnswers((current) => ({ ...current, [question.id]: optionIndex }))}
                     className={cx(
                       "flex items-start gap-3 rounded-[9px] border px-3.5 py-2.5 text-left text-[14px] transition-colors",
                       submitted && isAnswer && "border-ok-line bg-ok-bg",
                       submitted && isChosen && !isAnswer && "border-risk-line bg-risk-bg",
                       !submitted && isChosen && "border-primary bg-inset",
-                      !submitted && !isChosen && "border-line hover:bg-inset",
+                      !submitted && !isChosen && "border-line",
+                      !submitted && !readOnly && !isChosen && "hover:bg-inset",
+                      readOnly && "cursor-default opacity-75",
                       submitted && !isAnswer && !isChosen && "border-line opacity-60",
                     )}
                   >
@@ -174,7 +198,7 @@ function Quiz({ questions, onPass, busy }: { questions: QuizQuestion[]; onPass: 
         );
       })}
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-line bg-inset px-5 py-4">
+      {!readOnly ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-line bg-inset px-5 py-4">
         {submitted ? (
           <>
             <div>
@@ -205,7 +229,7 @@ function Quiz({ questions, onPass, busy }: { questions: QuizQuestion[]; onPass: 
             </Button>
           </>
         )}
-      </div>
+      </div> : null}
     </section>
   );
 }

@@ -2,7 +2,7 @@ import { env } from "./server-env";
 import { eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { localSessions, localUsers } from "../../db/schema";
-import { readHeaderIdentity, type RequestIdentity } from "./identity-trust";
+import { readHeaderIdentity, type IdentityRole, type RequestIdentity } from "./identity-trust";
 import { isManagedEnvironment } from "./runtime-env";
 import { readSessionToken } from "./session-token";
 
@@ -63,11 +63,29 @@ async function sessionIdentity(request: Request): Promise<RequestIdentity | null
   if (session?.status !== "active") return null;
   if (new Date(session.expiresAt).getTime() <= Date.now()) return null;
 
+  const role: IdentityRole = session.role === "admin"
+    ? "admin"
+    : session.role === "facilitator"
+      ? "facilitator"
+      : "learner";
+
   return {
     email: session.email,
     displayName: session.displayName,
     source: "local-session",
-    role: session.role === "facilitator" ? "facilitator" : "learner",
+    role,
+  };
+}
+
+const safeDemoMethod = (method: string) => method === "GET" || method === "HEAD" || method === "OPTIONS";
+
+export function publicDemoIdentity(request: Request, managed = isManagedEnvironment()): RequestIdentity | null {
+  if (!managed || !safeDemoMethod(request.method)) return null;
+  return {
+    email: "public-demo@upskill.invalid",
+    displayName: "Demo visitor",
+    source: "public-demo",
+    role: "viewer",
   };
 }
 
@@ -80,7 +98,7 @@ export async function getRequestIdentity(request: Request): Promise<RequestIdent
     managed,
     local,
   });
-  if (headerIdentity) return headerIdentity;
+  if (headerIdentity) return headerIdentity.role === "viewer" && !safeDemoMethod(request.method) ? null : headerIdentity;
 
   // Account sessions work on any hostname so an invited learner can sign in.
   const session = await sessionIdentity(request);
@@ -96,7 +114,7 @@ export async function getRequestIdentity(request: Request): Promise<RequestIdent
     };
   }
 
-  return null;
+  return publicDemoIdentity(request, managed);
 }
 
 export function unauthorizedResponse() {
@@ -105,4 +123,8 @@ export function unauthorizedResponse() {
 
 export function facilitatorRequiredResponse() {
   return Response.json({ error: "Facilitator access is required" }, { status: 403 });
+}
+
+export function adminRequiredResponse() {
+  return Response.json({ error: "Administrator access is required" }, { status: 403 });
 }

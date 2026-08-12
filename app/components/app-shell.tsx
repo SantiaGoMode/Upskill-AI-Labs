@@ -3,15 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { isFacilitator, useIdentity, type Identity } from "../lib/client-api";
+import { isAdmin, isFacilitator, isViewer, useIdentity, type Identity } from "../lib/client-api";
 import { cx } from "./ui";
 import { ThemeToggle } from "./theme-toggle";
 
 type NavItem = {
   href: string;
   label: string;
-  /** Facilitator-only surfaces are hidden from learners rather than disabled. */
-  facilitatorOnly?: boolean;
 };
 
 const LEARNER_NAV: NavItem[] = [
@@ -23,11 +21,13 @@ const LEARNER_NAV: NavItem[] = [
 ];
 
 const FACILITATOR_NAV: NavItem[] = [
-  { href: "/studio", label: "Studio", facilitatorOnly: true },
-  { href: "/cohorts", label: "Cohorts", facilitatorOnly: true },
-  { href: "/review", label: "Review", facilitatorOnly: true },
-  { href: "/governance", label: "Governance", facilitatorOnly: true },
+  { href: "/studio", label: "Studio" },
+  { href: "/cohorts", label: "Cohorts" },
+  { href: "/review", label: "Review" },
+  { href: "/governance", label: "Governance" },
 ];
+
+const ADMIN_NAV: NavItem[] = [{ href: "/admin", label: "Users" }];
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
@@ -38,7 +38,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const items = [...LEARNER_NAV, ...(isFacilitator(identity) ? FACILITATOR_NAV : [])];
+  const items = [
+    ...LEARNER_NAV,
+    ...(isFacilitator(identity) ? FACILITATOR_NAV : []),
+    ...(isAdmin(identity) ? ADMIN_NAV : []),
+  ];
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -111,6 +115,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : null}
       </header>
 
+      {!loading && isViewer(identity) ? (
+        <div className="border-b border-warn-line bg-warn-bg px-6 py-2 text-center text-[13px] font-semibold text-warn-fg">
+          Read-only demo · browse the course and evidence, or sign in from Account for an assigned role.
+        </div>
+      ) : null}
+
       <main id="main" className="flex-1">
         {children}
       </main>
@@ -151,7 +161,13 @@ function AccountChip({ identity }: { identity: Identity | null }) {
         {initials || "U"}
       </span>
       <span className="hidden text-[13px] font-semibold md:inline">
-        {identity.role === "facilitator" ? "Facilitator" : "Learner"}
+        {identity.role === "admin"
+          ? "Admin"
+          : identity.role === "facilitator"
+            ? "Facilitator"
+            : identity.role === "viewer"
+              ? "Demo"
+              : "Student"}
       </span>
     </Link>
   );

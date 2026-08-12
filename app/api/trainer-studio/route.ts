@@ -4,6 +4,7 @@ import { ensureLabSchema } from "../../../db/runtime";
 import { cohorts, curriculumVersions, workflowMaps } from "../../../db/schema";
 import { curriculumLabs } from "../../curriculum-data";
 import { recordAudit } from "../../lib/governance";
+import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { boundedText, MAX_STORED_JSON_CHARS, readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 import type { WorkflowCandidate } from "../../lib/redaction";
@@ -41,7 +42,7 @@ async function workflowSummary(facilitatorEmail: string) {
 
 export async function GET(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
-  if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+  if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
   // Scoped to the caller: cohort rows carry another organization's learner
   // addresses, and its curriculum drafts are not this facilitator's to read.
   const versions = (await getDb().select().from(curriculumVersions)
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
-  if (identity.role !== "facilitator") return facilitatorRequiredResponse();
+  if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
   const parsed = await readJsonBody<Record<string, unknown>>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body; const action = String(body.action ?? "");

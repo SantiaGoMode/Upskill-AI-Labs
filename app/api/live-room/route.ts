@@ -104,7 +104,7 @@ async function roomView(sessionId: string, identity: Identity) {
     room,
     participants: access.facilitator
       ? participants
-      : participants.map((participant) => ({ id: participant.id, displayName: participant.userEmail === identity.email ? "You" : participant.role === "facilitator" ? participant.displayName : "Learner", role: participant.role, status: participant.status, lastSeenAt: participant.lastSeenAt })),
+      : participants.map((participant) => ({ id: participant.id, displayName: participant.userEmail === identity.email ? "You" : participant.role === "facilitator" || participant.role === "admin" ? participant.displayName : "Learner", role: participant.role, status: participant.status, lastSeenAt: participant.lastSeenAt })),
     cards: cards.map((card) => ({
       ...card,
       payload: parsePayload(card.payload),

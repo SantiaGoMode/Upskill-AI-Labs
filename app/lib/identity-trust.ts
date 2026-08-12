@@ -8,12 +8,12 @@
  * so the trust decision can be unit tested directly.
  */
 
-export type IdentityRole = "learner" | "facilitator";
+export type IdentityRole = "viewer" | "learner" | "facilitator" | "admin";
 
 export type RequestIdentity = {
   email: string;
   displayName: string;
-  source: "trusted-header" | "local-session" | "local";
+  source: "trusted-header" | "local-session" | "local" | "public-demo";
   role: IdentityRole;
 };
 
@@ -69,10 +69,24 @@ export function readHeaderIdentity(headers: Headers, context: HeaderTrustContext
     }
   }
 
+  const requestedRole = headers.get("oai-authenticated-user-role");
+  const role: IdentityRole = requestedRole === "admin"
+    ? "admin"
+    : requestedRole === "facilitator"
+      ? "facilitator"
+      : requestedRole === "viewer"
+        ? "viewer"
+        : "learner";
+
   return {
     email,
     displayName,
     source: "trusted-header",
-    role: headers.get("oai-authenticated-user-role") === "facilitator" ? "facilitator" : "learner",
+    role,
   };
 }
+
+export const hasFacilitatorAccess = (identity: Pick<RequestIdentity, "role">) =>
+  identity.role === "facilitator" || identity.role === "admin";
+
+export const hasAdminAccess = (identity: Pick<RequestIdentity, "role">) => identity.role === "admin";

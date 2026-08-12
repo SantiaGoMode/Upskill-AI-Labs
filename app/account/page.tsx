@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import type { PersistedAttempt } from "../lib/attempt-types";
 import { labById } from "../lib/labs";
-import { errorMessage, formatDateTime, post, useIdentity, useResource } from "../lib/client-api";
+import { errorMessage, formatDateTime, isFacilitator, isViewer, post, useIdentity, useResource } from "../lib/client-api";
 import { signInWithGoogle, signOutOfFirebase } from "../lib/firebase-client";
 import {
   Badge,
@@ -112,7 +112,7 @@ function AccountView() {
                   <p className="m-0 text-[17px] font-bold">{identity.displayName}</p>
                   <p className="m-0 mt-1 break-words text-[13px] text-muted">{identity.email}</p>
                 </div>
-                <Badge tone={identity.role === "facilitator" ? "primary" : "neutral"}>{identity.role}</Badge>
+                <Badge tone={isFacilitator(identity) ? "primary" : "neutral"}>{identity.role}</Badge>
               </div>
               <p className="mt-4 text-[13px] text-muted">
                 Session source: <span className="font-mono">{identity.source}</span>
@@ -121,6 +121,17 @@ function AccountView() {
                 <Button className="mt-4" onClick={() => void signOut()} disabled={busy}>
                   Sign out
                 </Button>
+              ) : isViewer(identity) ? (
+                <>
+                  <Callout tone="info" className="mt-4">
+                    You are viewing the public demo. Quizzes, labs, progress, and other actions are disabled.
+                  </Callout>
+                  {firebaseSignInAvailable ? (
+                    <Button variant="primary" className="mt-4 w-full" onClick={() => void googleSignIn()} disabled={busy}>
+                      {busy ? "Signing in…" : "Continue with Google"}
+                    </Button>
+                  ) : null}
+                </>
               ) : (
                 <Callout tone="info" className="mt-4">
                   {identity.source === "trusted-header"
