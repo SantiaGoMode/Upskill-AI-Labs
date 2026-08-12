@@ -12,6 +12,7 @@ import { resolveSourceText } from "../../lib/source-text";
 import { serverErrorResponse } from "../../lib/observability";
 import { boundedText, MAX_CARDS_PER_ROOM, MAX_PROMPT_CHARS, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoCohorts, isDemoViewer } from "../../lib/demo-record";
 
 type Identity = NonNullable<Awaited<ReturnType<typeof getRequestIdentity>>>;
 
@@ -115,11 +116,18 @@ async function roomView(sessionId: string, identity: Identity) {
 }
 
 export async function GET(request: Request) {
-  await ensureLabSchema();
   const identity = await getRequestIdentity(request);
   if (!identity) return unauthorizedResponse();
   const sessionId = new URL(request.url).searchParams.get("sessionId") ?? "";
   if (!sessionId) return Response.json({ error: "sessionId is required" }, { status: 400 });
+  if (isDemoViewer(identity)) {
+    const cohort = demoCohorts.find((item) => item.sessions.some((session) => session.id === sessionId));
+    const session = cohort?.sessions.find((item) => item.id === sessionId);
+    return session
+      ? Response.json({ identity, facilitator: false, session: { ...session, cohortName: cohort?.name }, room: null, participants: [], cards: [] })
+      : Response.json({ error: "Live session not found" }, { status: 404 });
+  }
+  await ensureLabSchema();
   const view = await roomView(sessionId, identity);
   if (!view) return Response.json({ error: "Live session not found" }, { status: 404 });
   return Response.json({ identity, ...view });

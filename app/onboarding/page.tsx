@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { artifactShapeFromText, type ArtifactShape, type WorkflowCandidate } from "../lib/redaction";
-import { errorMessage, post, useResource } from "../lib/client-api";
+import { errorMessage, isViewer, post, useIdentity, useResource } from "../lib/client-api";
 import {
   Badge,
   Banners,
@@ -11,6 +11,7 @@ import {
   Callout,
   Card,
   cx,
+  LinkButton,
   Page,
   PageHeader,
   Section,
@@ -42,6 +43,8 @@ const TIER_COPY: Record<string, string> = {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { identity, loading: identityLoading } = useIdentity();
+  const readOnly = isViewer(identity);
   const { data, loading, error: loadError, reload } = useResource<OnboardingState>("/api/onboarding");
 
   const [role, setRole] = useState(
@@ -129,8 +132,43 @@ export default function OnboardingPage() {
 
       <Banners errors={[loadError, error]} />
 
-      {loading ? (
+      {loading || identityLoading ? (
         <Spinner label="Loading intake…" />
+      ) : readOnly ? (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+          <Section title="Confirmed learner context">
+            <Card className="p-5">
+              <Badge tone="warn">Read-only demo</Badge>
+              <h2 className="mt-4 text-[20px] font-bold">Senior program manager · Technology</h2>
+              <p className="mt-2 text-[14px] leading-relaxed text-muted">
+                This representative intake used T1 structural redaction. The raw artifact stayed in the learner&rsquo;s browser; only its non-content shape informed the workflow map.
+              </p>
+              <dl className="mt-5 grid gap-3 text-[13px]">
+                <div><dt className="text-muted">Intake tier</dt><dd className="mt-1 font-bold">T1 · Redacted structure</dd></div>
+                <div><dt className="text-muted">Workflow map</dt><dd className="mt-1 font-bold">9 confirmed · 3 prioritized</dd></div>
+                <div><dt className="text-muted">Policy</dt><dd className="mt-1 font-bold">{data?.policy.name}</dd></div>
+              </dl>
+              <LinkButton href="/path" variant="primary" className="mt-6 w-full">View the resulting pathway</LinkButton>
+            </Card>
+          </Section>
+
+          <Section title="Confirmed workflow map" description="Priority workflows are marked and drive the scenario skin across all eight labs.">
+            <Card className="overflow-hidden">
+              <ul className="m-0 list-none p-0">
+                {(workflowMap?.workflows ?? []).map((workflow, index) => {
+                  const selected = workflowMap?.priorityWorkflowIds.includes(workflow.id);
+                  return (
+                    <li key={workflow.id} className={cx("grid grid-cols-[26px_1fr_auto] gap-3 border-t border-line px-4 py-3 first:border-t-0", selected && "bg-ok-bg")}>
+                      <span className={cx("mt-0.5 grid h-[22px] w-[22px] place-items-center rounded-full border text-[11px] font-bold", selected ? "border-ok-fg bg-ok-fg text-[color:var(--bg-raised)]" : "border-line-strong text-subtle")}>{selected ? "✓" : index + 1}</span>
+                      <span className="min-w-0"><span className="block text-[14px] font-bold">{workflow.name}</span><span className="mt-0.5 block text-[13px] leading-relaxed text-muted">{workflow.trigger} → {workflow.outcome}</span></span>
+                      {selected ? <Badge tone="ok">Priority</Badge> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          </Section>
+        </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <Section title="1 · Describe the work">

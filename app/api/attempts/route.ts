@@ -7,6 +7,7 @@ import { evaluateCurriculumLab, evaluateLabOne } from "../../lib/evaluator";
 import { serverErrorResponse } from "../../lib/observability";
 import { boundedAttemptPayload, boundedText, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoAttempts, isDemoViewer } from "../../lib/demo-record";
 
 function parseJson<T>(value: string, fallback: T): T {
   try {
@@ -38,10 +39,17 @@ function errorResponse(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    await ensureLabSchema();
     const identity = await getRequestIdentity(request);
     if (!identity) return unauthorizedResponse();
     const searchParams = new URL(request.url).searchParams;
+    if (isDemoViewer(identity)) {
+      if (searchParams.get("history") === "1") return Response.json({ identity, attempts: demoAttempts });
+      const demoAttempt = demoAttempts.find((attempt) => attempt.id === searchParams.get("id"));
+      return demoAttempt
+        ? Response.json({ attempt: demoAttempt, evaluation: null, submissionId: null })
+        : Response.json({ error: "Attempt not found" }, { status: 404 });
+    }
+    await ensureLabSchema();
     if (searchParams.get("history") === "1") {
       const rows = await getDb().select().from(labAttempts)
         .where(eq(labAttempts.ownerEmail, identity.email))

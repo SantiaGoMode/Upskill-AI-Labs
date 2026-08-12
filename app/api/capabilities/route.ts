@@ -7,6 +7,7 @@ import type { DeterministicEvalResult, RubricBand } from "../../lib/attempt-type
 import { recordAudit } from "../../lib/governance";
 import { boundedText, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoBaseline, demoClaims, demoMeasurements, isDemoViewer } from "../../lib/demo-record";
 
 const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value) as T; } catch { return fallback; } };
 const playForLab = (labId: string) => labId === "lab-01" ? "EXTRACT-STRUCTURE" : curriculumLabs.find((lab) => lab.id === labId)?.play ?? "AI-WORKFLOW";
@@ -14,7 +15,9 @@ const claimView = (row: typeof capabilityClaims.$inferSelect) => ({ ...row, evid
 const bandRank = { Developing: 0, Capable: 1, Strong: 2 } as const;
 
 export async function GET(request: Request) {
-  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  if (isDemoViewer(identity)) return Response.json({ claims: demoClaims, baselines: [demoBaseline], measurements: demoMeasurements });
+  await ensureLabSchema();
   const claims = await getDb().select().from(capabilityClaims).where(eq(capabilityClaims.ownerEmail, identity.email)).orderBy(desc(capabilityClaims.updatedAt));
   const baselines = await getDb().select().from(workflowBaselines).where(eq(workflowBaselines.ownerEmail, identity.email)).orderBy(desc(workflowBaselines.createdAt));
   const measurements = await getDb().select().from(workflowMeasurements).where(eq(workflowMeasurements.ownerEmail, identity.email)).orderBy(desc(workflowMeasurements.measuredAt));

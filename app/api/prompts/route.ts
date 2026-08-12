@@ -4,6 +4,7 @@ import { ensureLabSchema } from "../../../db/runtime";
 import { labAttempts, modelRuns, regressionRuns } from "../../../db/schema";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 import { selectInChunks } from "../../lib/sql-chunks";
+import { demoPromptEntries, isDemoViewer } from "../../lib/demo-record";
 
 /**
  * Backs the prompt library. Everything here is derived from work the learner
@@ -22,9 +23,10 @@ const parse = <T,>(value: string, fallback: T): T => {
 type RegressionResult = { passed: number; total: number; criticalFailures: number; promotionReady: boolean };
 
 export async function GET(request: Request) {
-  await ensureLabSchema();
   const identity = await getRequestIdentity(request);
   if (!identity) return unauthorizedResponse();
+  if (isDemoViewer(identity)) return Response.json({ entries: demoPromptEntries });
+  await ensureLabSchema();
 
   const db = getDb();
   const attempts = await db

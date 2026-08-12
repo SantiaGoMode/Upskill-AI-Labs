@@ -4,7 +4,7 @@ import Link from "next/link";
 import { labById } from "../lib/labs";
 import type { RecipeNode } from "../lib/recipe-engine";
 import { priorityWorkflows, type WorkflowCandidate } from "../lib/redaction";
-import { useResource } from "../lib/client-api";
+import { isViewer, useIdentity, useResource } from "../lib/client-api";
 import { Badge, Callout, Card, LinkButton, Page, PageHeader, Section, Spinner } from "../components/ui";
 
 type OnboardingState = {
@@ -20,6 +20,8 @@ const MODE_TONE: Record<RecipeNode["mode"], "neutral" | "info" | "warn"> = {
 };
 
 export default function PathwayPage() {
+  const { identity, loading: identityLoading } = useIdentity();
+  const readOnly = isViewer(identity);
   const { data, loading, error } = useResource<OnboardingState>("/api/onboarding");
 
   const route = data?.curriculum?.route ?? [];
@@ -33,8 +35,16 @@ export default function PathwayPage() {
         eyebrow="Recipe engine · fixed spine, flexible skin"
         title="My pathway"
         lede="The assessed sequence never changes. What adapts is the scenario context, the pacing, and any remediation — and every adaptation is shown to you and to your facilitator rather than applied silently."
-        actions={<LinkButton href="/onboarding" variant={route.length ? "secondary" : "primary"}>{route.length ? "Redo intake" : "Start intake"}</LinkButton>}
+        actions={identityLoading ? null : readOnly
+          ? <LinkButton href="/course" variant="secondary">View full course</LinkButton>
+          : <LinkButton href="/onboarding" variant={route.length ? "secondary" : "primary"}>{route.length ? "Redo intake" : "Start intake"}</LinkButton>}
       />
+
+      {readOnly ? (
+        <Callout tone="info" className="mb-6" title="Read-only learner record">
+          This pathway shows how the fixed eight-lab spine adapts for a senior program manager. You can inspect every lab, but changing the intake or pathway requires an assigned account.
+        </Callout>
+      ) : null}
 
       {error ? <Callout tone="risk" className="mb-6">{error}</Callout> : null}
 

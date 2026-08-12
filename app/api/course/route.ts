@@ -6,13 +6,15 @@ import { lessonById } from "../../content/course";
 import { serverErrorResponse } from "../../lib/observability";
 import { readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoLessonProgress, isDemoViewer } from "../../lib/demo-record";
 
 /** Course progress. Reading lessons record completion; checks also record a score. */
 
 export async function GET(request: Request) {
-  await ensureLabSchema();
   const identity = await getRequestIdentity(request);
   if (!identity) return unauthorizedResponse();
+  if (isDemoViewer(identity)) return Response.json({ progress: demoLessonProgress });
+  await ensureLabSchema();
 
   const rows = await getDb()
     .select()

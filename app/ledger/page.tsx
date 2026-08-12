@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { priorityWorkflows, type WorkflowCandidate } from "../lib/redaction";
-import { formatDate, useResource } from "../lib/client-api";
+import { formatDate, isViewer, useIdentity, useResource } from "../lib/client-api";
 import { useAction, type ActionRunner } from "../lib/use-action";
 import {
   BandBadge,
+  Badge,
   Banners,
   Button,
   Callout,
@@ -49,6 +50,8 @@ type LedgerState = { claims: Claim[]; baselines: Baseline[]; measurements: Measu
 type OnboardingState = { workflowMap: { workflows: WorkflowCandidate[]; priorityWorkflowIds: string[] } | null };
 
 export default function LedgerPage() {
+  const { identity, loading: identityLoading } = useIdentity();
+  const readOnly = isViewer(identity);
   const ledger = useResource<LedgerState>("/api/capabilities");
   const onboarding = useResource<OnboardingState>("/api/onboarding");
   const { busy, error, notice, run: act } = useAction("/api/capabilities", ledger.reload);
@@ -64,12 +67,20 @@ export default function LedgerPage() {
         eyebrow="Proof instead of certificates"
         title="Capability ledger"
         lede="Every claim points at the work that earned it, is stated as a band rather than a false-precision score, and expires after 180 days. Models change, so claims must too."
-        actions={
+        actions={identityLoading ? null : readOnly ? (
+          <Badge tone="warn">Read-only evidence</Badge>
+        ) : (
           <Button variant="primary" onClick={() => void act({ action: "refresh-claims" }, "Claims refreshed from your assessed submissions.")} disabled={busy}>
             Refresh from lab evidence
           </Button>
-        }
+        )}
       />
+
+      {readOnly ? (
+        <Callout tone="info" className="mb-6">
+          This is a representative learner ledger. Evidence links, claim bands, expiry, baseline, and follow-up measurement are visible; refresh, baseline, and re-measure actions are disabled for demo visitors.
+        </Callout>
+      ) : null}
 
       <Banners errors={[ledger.error, error]} notice={notice} />
 
@@ -112,7 +123,15 @@ export default function LedgerPage() {
         description="The top tier of claim needs a real before-and-after: a baseline now, re-measured at least 30 days later."
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <BaselineForm priorities={priorities} busy={busy} onSubmit={act} />
+          {readOnly ? (
+            <Card className="p-5">
+              <p className="eyebrow mb-2">Read-only transfer evidence</p>
+              <h3 className="text-[17px] font-bold">A baseline was captured before training</h3>
+              <p className="mt-2 text-[14px] leading-relaxed text-muted">
+                The demo record includes a 30-day follow-up so the transfer model is visible without allowing the visitor to create or alter evidence.
+              </p>
+            </Card>
+          ) : <BaselineForm priorities={priorities} busy={busy} onSubmit={act} />}
 
           <Card>
             <CardHeader eyebrow="Recorded" title="Baselines and measurements" />
@@ -143,7 +162,7 @@ export default function LedgerPage() {
                             ))}
                           </ul>
                         ) : null}
-                        <MeasurementForm baseline={baseline} busy={busy} onSubmit={act} />
+                        {!readOnly ? <MeasurementForm baseline={baseline} busy={busy} onSubmit={act} /> : null}
                       </li>
                     );
                   })}

@@ -8,6 +8,7 @@ import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { byText, byTextDesc, selectInChunks } from "../../lib/sql-chunks";
 import { readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoCohorts, isDemoViewer } from "../../lib/demo-record";
 
 const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value) as T; } catch { return fallback; } };
 
@@ -63,7 +64,9 @@ async function buildCohortViews(rows: Array<typeof cohorts.$inferSelect>) {
 }
 
 export async function GET(request: Request) {
-  await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  if (isDemoViewer(identity)) return Response.json({ identity, cohorts: demoCohorts });
+  await ensureLabSchema();
   const db = getDb();
   if (hasFacilitatorAccess(identity)) {
     const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);

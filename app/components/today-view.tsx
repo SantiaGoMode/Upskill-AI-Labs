@@ -14,7 +14,7 @@ type CohortSession = { id: string; title: string; scheduledAt: string; status: s
 type LearnerCohort = { id: string; name: string; status: string; sessions: CohortSession[] };
 
 export function TodayView() {
-  const { identity } = useIdentity();
+  const { identity, loading: identityLoading } = useIdentity();
   const attempts = useResource<{ attempts: PersistedAttempt[] }>("/api/attempts?history=1");
   const capabilities = useResource<{ claims: Claim[] }>("/api/capabilities");
   const cohorts = useResource<{ cohorts: LearnerCohort[] }>("/api/cohorts");
@@ -198,7 +198,7 @@ export function TodayView() {
                     </p>
                   </div>
                   <LinkButton size="sm" variant={session.status === "live" ? "primary" : "secondary"} href={`/room/${session.id}`}>
-                    {session.status === "live" ? "Join" : "Open"}
+                    {identity?.role === "viewer" ? "Preview" : session.status === "live" ? "Join" : "Open"}
                   </LinkButton>
                 </Card>
               ))}
@@ -217,8 +217,8 @@ export function TodayView() {
               sent. The assessed spine never changes — only the skin around it.
             </p>
           </div>
-          <LinkButton variant="primary" href="/onboarding">
-            Map my workflows
+          <LinkButton variant="primary" href={identityLoading || identity?.role === "viewer" ? "/path" : "/onboarding"}>
+            {identityLoading ? "View pathway" : identity?.role === "viewer" ? "View demo pathway" : "Map my workflows"}
           </LinkButton>
         </Card>
       </Section>

@@ -8,6 +8,7 @@ import { isArtifactShape, proposeWorkflows, type ArtifactShape, type IntakeTier,
 import { serverErrorResponse } from "../../lib/observability";
 import { boundedText, MAX_STORED_JSON_CHARS, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { demoOnboardingState, demoPolicy, demoTransferExperiment, isDemoViewer } from "../../lib/demo-record";
 
 const parse = <T>(value: string, fallback: T) => { try { return JSON.parse(value) as T; } catch { return fallback; } };
 const mapRow = (row: typeof workflowMaps.$inferSelect) => ({
@@ -31,8 +32,11 @@ async function transferSummary() {
 }
 
 export async function GET(request: Request) {
-  await ensureLabSchema();
   const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
+  if (isDemoViewer(identity)) {
+    return Response.json({ ...demoOnboardingState, currentExperiment: null, experiment: demoTransferExperiment, policy: demoPolicy });
+  }
+  await ensureLabSchema();
   const [map] = await getDb().select().from(workflowMaps).where(eq(workflowMaps.ownerEmail, identity.email)).orderBy(desc(workflowMaps.updatedAt)).limit(1);
   const [instance] = await getDb().select().from(curriculumInstances).where(eq(curriculumInstances.ownerEmail, identity.email)).orderBy(desc(curriculumInstances.updatedAt)).limit(1);
   const [currentExperiment] = map ? await getDb().select().from(redactionExperiments).where(eq(redactionExperiments.workflowMapId, map.id)).orderBy(desc(redactionExperiments.createdAt)).limit(1) : [];
