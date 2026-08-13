@@ -19,7 +19,6 @@
 
 # next.js
 /.next/
-/.vinext/
 /out/
 
 # misc
@@ -35,15 +34,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-.dev.vars
 
 # vercel
 .vercel
 
 # typescript
 next-env.d.ts
-/dist/
-/.wrangler/
 
 # local planning and implementation artifacts
 /docs/PRODUCT-BLUEPRINT.md

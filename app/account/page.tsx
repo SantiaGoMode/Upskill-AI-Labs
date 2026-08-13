@@ -134,8 +134,8 @@ function AccountView() {
                 </>
               ) : (
                 <Callout tone="info" className="mt-4">
-                  {identity.source === "trusted-header"
-                    ? "Identity comes from the authenticating proxy, so sign-out is handled upstream."
+                  {identity.source === "local-header"
+                    ? "This local-only identity was supplied by the test harness."
                     : "This is the local development identity configured in your environment file."}
                 </Callout>
               )}

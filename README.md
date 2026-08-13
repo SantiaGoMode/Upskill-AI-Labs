@@ -149,8 +149,9 @@ that need a separately bootstrapped facilitator list.
 
 `SESSION_SECRET` signs account session cookies and is stored in Google Secret Manager
 through the App Hosting secret binding in `apphosting.yaml`. A managed environment
-refuses to create or accept sessions without it. The older trusted-proxy header path is
-still available for private deployments, but it is not required by Firebase hosting.
+refuses to create or accept sessions without it. Request-header identity switching is
+accepted only on localhost for the automated test harness; Firebase Authentication and
+the signed session are the only deployed identity path.
 
 Attempts, histories, submissions, model runs, workflow maps, baselines, measurements, and claims are scoped to the authenticated email on the server.
 

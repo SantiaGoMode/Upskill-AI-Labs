@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  headerIdentityIsTrusted,
-  PROXY_SECRET_HEADER,
-  readHeaderIdentity,
-  secretsMatch,
-} from "../../app/lib/identity-trust";
+import { readLocalHeaderIdentity } from "../../app/lib/identity-trust";
 import { createSessionToken, readSessionToken } from "../../app/lib/session-token";
 import { publicDemoIdentity } from "../../app/lib/request-identity";
 
@@ -14,60 +9,26 @@ const identityHeaders = (extra: Record<string, string> = {}) => new Headers({
   ...extra,
 });
 
-describe("upstream identity trust", () => {
-  it("rejects identity headers on a deployment with no configured proxy secret", () => {
-    // The dangerous case: a public hostname where anyone could claim facilitator.
-    expect(headerIdentityIsTrusted("", { proxySecret: "", managed: true, local: false })).toBe(false);
-    expect(readHeaderIdentity(identityHeaders(), { proxySecret: "", managed: true, local: false })).toBeNull();
+describe("local header identities", () => {
+  it("rejects identity headers unless the caller explicitly allows local test identities", () => {
+    expect(readLocalHeaderIdentity(identityHeaders(), false)).toBeNull();
   });
 
-  it("requires the shared secret once one is configured, even on localhost", () => {
-    const context = { proxySecret: "expected-secret", managed: false, local: true };
-    expect(readHeaderIdentity(identityHeaders(), context)).toBeNull();
-    expect(readHeaderIdentity(identityHeaders({ [PROXY_SECRET_HEADER]: "wrong" }), context)).toBeNull();
-    expect(readHeaderIdentity(identityHeaders({ [PROXY_SECRET_HEADER]: "expected-secret" }), context)?.role)
-      .toBe("facilitator");
-  });
-
-  it("trusts a proxy that presents the secret on any hostname", () => {
-    const identity = readHeaderIdentity(identityHeaders({ [PROXY_SECRET_HEADER]: "s3cret" }), {
-      proxySecret: "s3cret",
-      managed: true,
-      local: false,
-    });
-    expect(identity).toEqual({
-      email: "learner@example.com",
-      displayName: "learner@example.com",
-      source: "trusted-header",
-      role: "facilitator",
-    });
-  });
-
-  it("keeps header identities usable in a local checkout with no secret configured", () => {
-    const identity = readHeaderIdentity(identityHeaders({ "oai-authenticated-user-role": "learner" }), {
-      proxySecret: "",
-      managed: false,
-      local: true,
-    });
+  it("keeps header identities usable by the local test harness", () => {
+    const identity = readLocalHeaderIdentity(identityHeaders({ "oai-authenticated-user-role": "learner" }), true);
     expect(identity?.email).toBe("learner@example.com");
     expect(identity?.role).toBe("learner");
+    expect(identity?.source).toBe("local-header");
   });
 
   it("defaults to the learner role and decodes an encoded display name", () => {
-    const identity = readHeaderIdentity(identityHeaders({
+    const identity = readLocalHeaderIdentity(identityHeaders({
       "oai-authenticated-user-role": "administrator",
       "oai-authenticated-user-full-name": "Ren%C3%A9e%20Diaz",
       "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
-    }), { proxySecret: "", managed: false, local: true });
+    }), true);
     expect(identity?.role).toBe("learner");
     expect(identity?.displayName).toBe("Renée Diaz");
-  });
-
-  it("compares secrets without short-circuiting on content", () => {
-    expect(secretsMatch("abcdef", "abcdef")).toBe(true);
-    expect(secretsMatch("abcdef", "abcdeg")).toBe(false);
-    expect(secretsMatch("abc", "abcdef")).toBe(false);
-    expect(secretsMatch("", "")).toBe(true);
   });
 });
 

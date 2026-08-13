@@ -2,12 +2,11 @@ import { env } from "./server-env";
 import { eq } from "../../db/firestore-orm";
 import { getDb } from "../../db";
 import { localSessions, localUsers } from "../../db/schema";
-import { readHeaderIdentity, type IdentityRole, type RequestIdentity } from "./identity-trust";
+import { readLocalHeaderIdentity, type IdentityRole, type RequestIdentity } from "./identity-trust";
 import { isManagedEnvironment } from "./runtime-env";
 import { readSessionToken } from "./session-token";
 
 export type { RequestIdentity } from "./identity-trust";
-export { PROXY_SECRET_HEADER } from "./identity-trust";
 
 export const LOCAL_SESSION_COOKIE = "upskill_session";
 
@@ -93,11 +92,9 @@ export async function getRequestIdentity(request: Request): Promise<RequestIdent
   const local = isLocalRequest(request);
   const managed = isManagedEnvironment();
 
-  const headerIdentity = readHeaderIdentity(request.headers, {
-    proxySecret: env.TRUSTED_PROXY_SECRET?.trim() ?? "",
-    managed,
-    local,
-  });
+  // Header-based role switching is a local test affordance, never a deployed
+  // authentication mechanism. Firebase sessions own the production boundary.
+  const headerIdentity = readLocalHeaderIdentity(request.headers, local && !managed);
   if (headerIdentity) return headerIdentity.role === "viewer" && !safeDemoMethod(request.method) ? null : headerIdentity;
 
   // Account sessions work on any hostname so an invited learner can sign in.

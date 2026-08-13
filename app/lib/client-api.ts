@@ -6,7 +6,7 @@ export type Identity = {
   email: string;
   displayName: string;
   role: "viewer" | "learner" | "facilitator" | "admin";
-  source: "trusted-header" | "local-session" | "local" | "public-demo";
+  source: "local-header" | "local-session" | "local" | "public-demo";
 };
 
 export class ApiError extends Error {

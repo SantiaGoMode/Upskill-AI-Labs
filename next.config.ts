@@ -1,12 +1,26 @@
 import type { NextConfig } from "next";
 
+const analyticsEnabled = process.env.NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED === "true";
+const scriptSources = ["'self'", "'unsafe-inline'", ...(analyticsEnabled ? ["https://www.googletagmanager.com"] : [])];
+const connectSources = [
+  "'self'",
+  "https://accounts.google.com",
+  "https://firebase.googleapis.com",
+  "https://firebaseinstallations.googleapis.com",
+  "https://firestore.googleapis.com",
+  "https://identitytoolkit.googleapis.com",
+  "https://securetoken.googleapis.com",
+  "https://www.googleapis.com",
+  ...(analyticsEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com"] : []),
+];
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+  `script-src ${scriptSources.join(" ")}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://accounts.google.com https://firebase.googleapis.com https://firebaseinstallations.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://www.google-analytics.com https://*.google-analytics.com",
+  `connect-src ${connectSources.join(" ")}`,
   "form-action 'self'",
   "base-uri 'self'",
   "object-src 'none'",
@@ -18,6 +32,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   async headers() {
     return [{
       source: "/:path*",

@@ -8,7 +8,7 @@ import { env } from "./server-env";
  * account, so domain-wide delegation or a stored user refresh token is required —
  * there is no client-credentials path.
  *
- * Configure in .dev.vars / .env:
+ * Configure in .env:
  *   GOOGLE_CLIENT_ID
  *   GOOGLE_CLIENT_SECRET
  *   GOOGLE_REFRESH_TOKEN

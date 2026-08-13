@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern release",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build:production": "ENVIRONMENT=production next build",
     "deploy": "firebase deploy --only apphosting:upskill-ai-labs --project processbridge --force",
@@ -34,14 +34,30 @@
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.10"
   },
   "overrides": {
+    "@babel/core": "7.29.7",
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.17",
+    "postcss": "8.5.26",
+    "vite": "8.2.1",
+    "gaxios@6.7.1": {
+      "uuid": "11.1.1"
+    },
+    "teeny-request@9.0.0": {
+      "uuid": "11.1.1"
+    },
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.18"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.9"
+    },
     "next": {
-      "postcss": "8.5.25",
       "sharp": "0.35.3"
     }
   },
