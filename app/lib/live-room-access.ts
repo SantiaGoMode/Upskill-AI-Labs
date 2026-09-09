@@ -22,6 +22,7 @@ export async function liveRoomAccess(sessionId: string, identity: RequestIdentit
     status: cohortSessions.status,
     meetingUri: cohortSessions.meetingUri,
     ownerEmail: cohorts.ownerEmail,
+    organizationId: cohorts.organizationId,
     cohortName: cohorts.name,
   }).from(cohortSessions).innerJoin(cohorts, eq(cohorts.id, cohortSessions.cohortId))
     .where(eq(cohortSessions.id, sessionId)).limit(1);

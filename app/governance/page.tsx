@@ -117,7 +117,7 @@ function Governance() {
 
           <Section
             title="Prompt retention"
-            description="Prompt and model-response records are deleted past the retention window by a nightly job. Submitted artifacts, evaluations, and capability claims are assessment evidence and are not covered."
+            description="Delete your organization's expired prompt and model-response records on demand. Submitted artifacts, evaluations, and capability claims are assessment evidence and are not covered."
           >
             <RetentionPanel retention={data?.retention} onDone={report.onDone} onError={report.onError} />
           </Section>
@@ -273,7 +273,7 @@ function PolicyEditor({
   );
 }
 
-/** Runs the purge the nightly cron would run, and reports what is currently expiring. */
+/** Runs an organization-scoped purge and reports eligible expired records. */
 function RetentionPanel({
   retention,
   onDone,
@@ -306,13 +306,14 @@ function RetentionPanel({
         </Callout>
       ) : (
         <p className="m-0 text-[15px]">
-          Records older than <strong>{retention?.retentionDays ?? 90} days</strong> are removed nightly at 03:00 UTC.
+          Your organization&apos;s records older than <strong>{retention?.retentionDays ?? 90} days</strong> are eligible for the on-demand purge. No automatic job is configured by this application.
           {" "}
           {retention?.expiring
-            ? `${retention.expiring} model run${retention.expiring === 1 ? " is" : "s are"} currently past the window.`
+            ? `${retention.expiring} prompt or model-response record${retention.expiring === 1 ? " is" : "s are"} currently past the window.`
             : "Nothing is currently past the window."}
         </p>
       )}
+      <p className="mt-3 text-sm text-[var(--muted)]">Legacy records without an organization ID and personal work with ambiguous organization ownership are excluded. Account erasure remains available for a learner&apos;s own data.</p>
       <Button className="mt-4" disabled={busy} onClick={() => void purge()}>
         {busy ? "Purging…" : "Run the purge now"}
       </Button>

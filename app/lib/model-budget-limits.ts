@@ -11,7 +11,7 @@
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 30;
 export const DEFAULT_DAILY_USD_CAP = 5;
 
-export type BudgetCode = "MODEL_RATE_LIMITED" | "MODEL_SPEND_CAP_REACHED";
+export type BudgetCode = "MODEL_RATE_LIMITED" | "MODEL_SPEND_CAP_REACHED" | "MODEL_PRICING_UNAVAILABLE" | "MODEL_RESERVATION_EXPIRED";
 
 /** Refused before any provider is contacted, so it costs nothing to hit. */
 export class ModelBudgetError extends Error {

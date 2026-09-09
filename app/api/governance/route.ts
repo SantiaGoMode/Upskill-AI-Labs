@@ -1,52 +1,48 @@
-import { desc, inArray, ne } from "../../../db/firestore-orm";
+import { desc, eq } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { auditEvents, policyProfiles } from "../../../db/schema";
-import { activePolicy, defaultPolicy, providerIds, recordAudit, toPolicy } from "../../lib/governance";
+import { activePolicy, activePolicyForOrganization, defaultPolicy, providerIds, recordAudit, saveOrganizationPolicy, toPolicy, type Policy } from "../../lib/governance";
+import { ensureFacilitatorOrganization } from "../../lib/cohort-operations";
+import { serverErrorResponse } from "../../lib/observability";
 import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { boundedText, readJsonBody } from "../../lib/request-limits";
 import { facilitatorRequiredResponse, getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
 import { purgeExpiredPromptData, retentionPreview } from "../../lib/retention";
-import { selectInChunks } from "../../lib/sql-chunks";
-import { facilitatorLearnerEmails } from "../../lib/tenancy";
 
 const boundedRules = (value: unknown, fallback: string[]) =>
   Array.isArray(value) ? value.slice(0, 50).map((rule) => boundedText(rule, 500)) : fallback;
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
-  const policy = await activePolicy();
-  if (!hasFacilitatorAccess(identity)) return Response.json({ policy });
-  const profiles = (await getDb().select().from(policyProfiles).orderBy(desc(policyProfiles.version))).map(toPolicy);
-  // The trail is scoped to this facilitator and the learners they are
-  // responsible for. Read unscoped it names another organization's people and
-  // what they did, which is not this facilitator's record to hold.
-  const visibleActors = [identity.email, ...await facilitatorLearnerEmails(identity.email)];
-  const audit = (await selectInChunks(visibleActors, (batch) =>
-    getDb().select().from(auditEvents).where(inArray(auditEvents.actorEmail, batch))
-      .orderBy(desc(auditEvents.createdAt)).limit(100)))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 100);
+  if (!hasFacilitatorAccess(identity)) return Response.json({ policy: await activePolicy(identity.email) });
+  const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);
+  const policy = await activePolicyForOrganization(organization.id);
+  const profiles = (await getDb().select().from(policyProfiles).where(eq(policyProfiles.organizationId, organization.id)).orderBy(desc(policyProfiles.version))).map(toPolicy);
+  const audit = await getDb().select().from(auditEvents).where(eq(auditEvents.organizationId, organization.id)).orderBy(desc(auditEvents.createdAt)).limit(100);
   return Response.json({
     policy,
     profiles: profiles.length ? profiles : [defaultPolicy],
     audit,
-    retention: await retentionPreview(),
+    organizationId: organization.id,
+    retention: await retentionPreview(organization.id),
   });
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   await ensureLabSchema(); const identity = await getRequestIdentity(request); if (!identity) return unauthorizedResponse();
   if (!hasFacilitatorAccess(identity)) return facilitatorRequiredResponse();
   const parsed = await readJsonBody<Record<string, unknown>>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
+  const organization = await ensureFacilitatorOrganization(identity.email, identity.displayName);
+  if (body.organizationId !== undefined && body.organizationId !== organization.id) return Response.json({ error: "Organization access denied" }, { status: 403 });
 
-  // The nightly cron does this on a schedule; this runs it on demand.
+  // Never run a global purge from an organization administrator's request.
   if (body.action === "purge-retention") {
-    const result = await purgeExpiredPromptData();
-    await recordAudit(identity.email, "policy.retention-purged", "policy-profile", (await activePolicy()).id, result.deleted);
-    return Response.json({ ...result, retention: await retentionPreview() });
+    const result = await purgeExpiredPromptData(organization.id, identity.email);
+    await recordAudit(identity.email, "policy.retention-purged", "policy-profile", (await activePolicyForOrganization(organization.id)).id, result.deleted, organization.id);
+    return Response.json({ ...result, retention: await retentionPreview(organization.id) });
   }
 
   if (body.action !== "save" && body.action !== "activate") return Response.json({ error: "Unsupported action" }, { status: 400 });
@@ -54,19 +50,24 @@ export async function POST(request: Request) {
   const dataClasses = Array.isArray(body.dataClasses) ? body.dataClasses.map(String).filter((item) => ["Public", "Internal", "Confidential", "Regulated"].includes(item)) : [];
   const approvedModels = Array.isArray(body.approvedModels) ? body.approvedModels.map(String).filter((item) => providerIds.includes(item as never)) : [];
   if (!["T0", "T1", "T2"].includes(allowedIntakeTier) || !dataClasses.length || !approvedModels.length) return Response.json({ error: "Tier, at least one data class, and at least one provider are required" }, { status: 400 });
-  const rows = await getDb().select().from(policyProfiles).orderBy(desc(policyProfiles.version)).limit(1);
-  const id = crypto.randomUUID(); const status = body.action === "activate" ? "active" : "draft";
-  if (status === "active") await getDb().update(policyProfiles).set({ status: "retired", updatedAt: new Date().toISOString() }).where(ne(policyProfiles.status, "retired"));
-  const [row] = await getDb().insert(policyProfiles).values({
-    id, name: boundedText(body.name || "Organization AI policy", 100).trim(), version: (rows[0]?.version ?? 0) + 1, status,
-    allowedIntakeTier, dataClassesJson: JSON.stringify(dataClasses), approvedModelsJson: JSON.stringify(approvedModels),
-    // Rule lists are free text shown back to every learner, so they are bounded
-    // in both count and length rather than stored as the client sent them.
-    prohibitedUsesJson: JSON.stringify(boundedRules(body.prohibitedUses, defaultPolicy.prohibitedUses)),
-    disclosureRulesJson: JSON.stringify(boundedRules(body.disclosureRules, defaultPolicy.disclosureRules)),
-    humanReviewRulesJson: JSON.stringify(boundedRules(body.humanReviewRules, defaultPolicy.humanReviewRules)),
-    promptRetentionDays: Math.max(0, Math.min(365, Number(body.promptRetentionDays ?? 90))), updatedBy: identity.email,
-  }).returning();
-  await recordAudit(identity.email, `policy.${status}`, "policy-profile", id, { version: row.version });
-  return Response.json({ policy: toPolicy(row) }, { status: 201 });
+  const days = Number(body.promptRetentionDays ?? 90);
+  if (!Number.isInteger(days) || days < 0 || days > 365) return Response.json({ error: "Retention must be an integer from 0 to 365 days" }, { status: 400 });
+  const policy = await saveOrganizationPolicy(organization.id, identity.email, {
+    ...defaultPolicy, name: boundedText(body.name || "Organization AI policy", 100).trim(),
+    allowedIntakeTier: allowedIntakeTier as Policy["allowedIntakeTier"], dataClasses, approvedModels: approvedModels as Policy["approvedModels"],
+    prohibitedUses: boundedRules(body.prohibitedUses, defaultPolicy.prohibitedUses),
+    disclosureRules: boundedRules(body.disclosureRules, defaultPolicy.disclosureRules),
+    humanReviewRules: boundedRules(body.humanReviewRules, defaultPolicy.humanReviewRules), promptRetentionDays: days,
+  }, body.action === "activate");
+  return Response.json({ policy }, { status: 201 });
+}
+
+export async function GET(request: Request) {
+  try { return await handleGet(request); }
+  catch (error) { return serverErrorResponse("governance", error, "Governance could not be loaded."); }
+}
+
+export async function POST(request: Request) {
+  try { return await handlePost(request); }
+  catch (error) { return serverErrorResponse("governance", error, "The governance operation could not be completed."); }
 }

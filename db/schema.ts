@@ -49,6 +49,7 @@ export const modelRuns = sqliteTable(
   "model_runs",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     attemptId: text("attempt_id").notNull().references(() => labAttempts.id),
     responseId: text("response_id").notNull(),
     model: text("model").notNull(),
@@ -66,6 +67,7 @@ export const judgeResults = sqliteTable(
   "judge_results",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     submissionId: text("submission_id").notNull().references(() => labSubmissions.id),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
@@ -113,6 +115,7 @@ export const regressionRuns = sqliteTable(
   "regression_runs",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     ownerEmail: text("owner_email").notNull(),
     attemptId: text("attempt_id").notNull().references(() => labAttempts.id),
     setId: text("set_id").notNull(),
@@ -185,6 +188,7 @@ export const policyProfiles = sqliteTable(
   "policy_profiles",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     name: text("name").notNull(),
     version: integer("version").notNull(),
     status: text("status").notNull().default("draft"),
@@ -201,6 +205,12 @@ export const policyProfiles = sqliteTable(
   },
   (table) => [index("policy_profiles_status_idx").on(table.status)],
 );
+
+export const organizationPolicyState = sqliteTable("organization_policy_state", {
+  id: text("id").primaryKey(),
+  activePolicyId: text("active_policy_id").notNull(),
+  version: integer("version").notNull(),
+});
 
 export const curriculumVersions = sqliteTable(
   "curriculum_versions",
@@ -251,6 +261,23 @@ export const organizations = sqliteTable(
   },
   (table) => [index("organizations_owner_email_idx").on(table.ownerEmail)],
 );
+
+/** Operational erasure state; manifests contain identifiers only, never artifacts. */
+export const accountErasures = sqliteTable("account_erasures", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull(),
+  generation: text("generation").notNull(),
+  lease: text("lease").notNull(),
+  leaseUntil: text("lease_until").notNull(),
+  pageCount: integer("page_count").notNull().default(0),
+  nextPage: integer("next_page").notNull().default(0),
+  countsJson: text("counts_json").notNull().default("{}"),
+});
+export const accountErasurePages = sqliteTable("account_erasure_pages", {
+  id: text("id").primaryKey(),
+  jobId: text("job_id").notNull(),
+  targetsJson: text("targets_json").notNull(),
+});
 
 export const organizationMembers = sqliteTable(
   "organization_members",
@@ -379,6 +406,7 @@ export const liveRoomBoardCards = sqliteTable(
   "live_room_board_cards",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     roomId: text("room_id").notNull().references(() => liveRooms.id),
     sectionKey: text("section_key").notNull(),
     authorEmail: text("author_email").notNull(),
@@ -467,6 +495,7 @@ export const auditEvents = sqliteTable(
   "audit_events",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     actorEmail: text("actor_email").notNull(),
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),
@@ -486,6 +515,7 @@ export const modelUsageEvents = sqliteTable(
   "model_usage_events",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id"),
     ownerEmail: text("owner_email").notNull(),
     /** workbench, judge, regression, or live-room. */
     purpose: text("purpose").notNull(),
@@ -498,6 +528,12 @@ export const modelUsageEvents = sqliteTable(
   },
   (table) => [index("model_usage_events_owner_idx").on(table.ownerEmail, table.createdAt)],
 );
+
+export const modelBudgetLedgers = sqliteTable("model_budget_ledgers", {
+  id: text("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  stateJson: text("state_json").notNull(),
+});
 
 export const lessonProgress = sqliteTable(
   "lesson_progress",

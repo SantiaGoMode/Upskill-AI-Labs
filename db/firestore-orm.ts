@@ -1,5 +1,7 @@
 import type { Column, SqlExpression } from "./firestore-schema";
 import { getAdminFirestore } from "./firebase-admin";
+import { usesFirestore } from "../app/lib/runtime-env";
+import { assertErasureWriteAllowed, guardedTable } from "./erasure-guard";
 
 type StoredRow = Record<string, unknown>;
 type RowContext = Record<string, StoredRow>;
@@ -24,12 +26,9 @@ type ProjectionRow<TProjection extends Projection> = {
       : unknown;
 };
 
-const isManaged = () => {
-  const value = process.env.ENVIRONMENT?.trim().toLowerCase();
-  return Boolean(process.env.FIRESTORE_EMULATOR_HOST || value === "production" || process.env.K_SERVICE);
-};
-
 interface Persistence {
+  transaction<T>(work: (tx: DocumentTransaction) => Promise<T>): Promise<T>;
+  ping(): Promise<void>;
   list(tableName: string): Promise<StoredRow[]>;
   query(tableName: string, filter: QueryFilter): Promise<StoredRow[]>;
   put(tableName: string, id: string, row: StoredRow): Promise<void>;
@@ -46,10 +45,46 @@ type QueryFilter = {
 
 declare global {
   var __upskillMemoryDb: Map<string, Map<string, StoredRow>> | undefined;
+  var __upskillMemoryRevision: number | undefined;
+}
+
+export interface DocumentTransaction {
+  get(table: string, id: string): Promise<StoredRow | undefined>;
+  put(table: string, id: string, row: StoredRow): void;
+  remove(table: string, id: string): void;
 }
 
 class MemoryPersistence implements Persistence {
   private readonly tables = globalThis.__upskillMemoryDb ??= new Map();
+
+  async ping() { void this.tables.size; }
+
+  async transaction<T>(work: (tx: DocumentTransaction) => Promise<T>): Promise<T> {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const revision = globalThis.__upskillMemoryRevision ?? 0;
+      const snapshot = structuredClone(this.tables);
+      const writes: Array<{ table: string; id: string; row?: StoredRow }> = [];
+      const result = await work({
+        get: async (table, id) => {
+          if (writes.length) throw new Error("Transaction reads must precede writes.");
+          return structuredClone(snapshot.get(table)?.get(id));
+        },
+        put: (table, id, row) => { writes.push({ table, id, row: structuredClone(row) }); },
+        remove: (table, id) => { writes.push({ table, id }); },
+      });
+      if (revision !== (globalThis.__upskillMemoryRevision ?? 0)) continue;
+      // Commit synchronously: no observer can see a partially applied transaction.
+      for (const { table, id, row } of writes) {
+        if (row) {
+          if (!this.tables.has(table)) this.tables.set(table, new Map());
+          this.tables.get(table)!.set(id, row);
+        } else this.tables.get(table)?.delete(id);
+      }
+      if (writes.length) globalThis.__upskillMemoryRevision = revision + 1;
+      return result;
+    }
+    throw new Error("Transaction contention exceeded retry limit.");
+  }
 
   async list(tableName: string) {
     return [...(this.tables.get(tableName)?.values() ?? [])].map((row) => structuredClone(row));
@@ -61,25 +96,48 @@ class MemoryPersistence implements Persistence {
   }
 
   async put(tableName: string, id: string, row: StoredRow) {
+    if (guardedTable(tableName)) return this.transaction(async (tx) => {
+      await assertErasureWriteAllowed(tx, tableName, row);
+      tx.put(tableName, id, row);
+    });
     let table = this.tables.get(tableName);
     if (!table) {
       table = new Map();
       this.tables.set(tableName, table);
     }
     table.set(id, structuredClone(row));
+    globalThis.__upskillMemoryRevision = (globalThis.__upskillMemoryRevision ?? 0) + 1;
   }
 
   async remove(tableName: string, id: string) {
     this.tables.get(tableName)?.delete(id);
+    globalThis.__upskillMemoryRevision = (globalThis.__upskillMemoryRevision ?? 0) + 1;
   }
 
   async clear() {
     this.tables.clear();
+    globalThis.__upskillMemoryRevision = (globalThis.__upskillMemoryRevision ?? 0) + 1;
   }
 }
 
 class FirestorePersistence implements Persistence {
   private readonly firestore = getAdminFirestore();
+
+  async transaction<T>(work: (tx: DocumentTransaction) => Promise<T>): Promise<T> {
+    return this.firestore.runTransaction(async (transaction) => work({
+      get: async (table, id) => {
+        const snapshot = await transaction.get(this.firestore.collection(table).doc(id));
+        return snapshot.exists ? snapshot.data() : undefined;
+      },
+      put: (table, id, row) => { transaction.set(this.firestore.collection(table).doc(id), row); },
+      remove: (table, id) => { transaction.delete(this.firestore.collection(table).doc(id)); },
+    }));
+  }
+
+  async ping() {
+    // A missing document still verifies database access, with at most one read.
+    await this.firestore.collection("_health").doc("readiness").get();
+  }
 
   async list(tableName: string) {
     const snapshot = await this.firestore.collection(tableName).get();
@@ -99,6 +157,10 @@ class FirestorePersistence implements Persistence {
   }
 
   async put(tableName: string, id: string, row: StoredRow) {
+    if (guardedTable(tableName)) return this.transaction(async (tx) => {
+      await assertErasureWriteAllowed(tx, tableName, row);
+      tx.put(tableName, id, row);
+    });
     await this.firestore.collection(tableName).doc(id).set(row);
   }
 
@@ -116,7 +178,8 @@ class FirestorePersistence implements Persistence {
 }
 
 let persistence: Persistence | null = null;
-const store = () => persistence ??= isManaged() ? new FirestorePersistence() : new MemoryPersistence();
+const store = () => persistence ??= usesFirestore() ? new FirestorePersistence() : new MemoryPersistence();
+let pendingProbe: Promise<void> | undefined;
 
 const valueFor = (context: RowContext, column: Column) => context[column.tableName]?.[column.key];
 
@@ -133,8 +196,13 @@ function evaluate(context: RowContext, condition?: Condition): boolean {
 function compareValues(left: unknown, operator: QueryFilter["operator"], right: unknown) {
   if (operator === "eq") return left === right;
   if (operator === "ne") return left !== right;
-  if (operator === "lt") return left != null && right != null && String(left) < String(right);
-  if (operator === "gte") return left != null && right != null && String(left) >= String(right);
+  if (operator === "lt" || operator === "gte") {
+    if (left == null || right == null) return false;
+    if (typeof left === "number" && typeof right === "number") {
+      return operator === "lt" ? left < right : left >= right;
+    }
+    return operator === "lt" ? String(left) < String(right) : String(left) >= String(right);
+  }
   return Array.isArray(right) && right.includes(left);
 }
 
@@ -371,6 +439,8 @@ export const desc = (column: Column): Order => ({ kind: "order", column, directi
 export { sql } from "./firestore-schema";
 
 export class FirestoreOrm {
+  /** Callback may retry. Read before writing; perform no external side effects. */
+  transaction<T>(work: (tx: DocumentTransaction) => Promise<T>) { return store().transaction(work); }
   select(): SelectBuilder<never>;
   select<TProjection extends Projection>(projection: TProjection): SelectBuilder<ProjectionRow<TProjection>>;
   select(projection?: Projection) { return new SelectBuilder(projection); }
@@ -380,6 +450,22 @@ export class FirestoreOrm {
   async batch<TStatements extends readonly PromiseLike<object[]>[]>(statements: TStatements): Promise<{ [K in keyof TStatements]: Awaited<TStatements[K]> }> {
     return Promise.all(statements) as Promise<{ [K in keyof TStatements]: Awaited<TStatements[K]> }>;
   }
-  async run(expression: SqlExpression) { void expression; return [{ ok: 1 }]; }
+  async ping(timeoutMs = 3000): Promise<void> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Readiness timeout must be positive.");
+    // Share an outstanding SDK read so repeated probes cannot pile up during an
+    // outage. A timed-out HTTP request does not cancel the underlying SDK call.
+    const probe = pendingProbe ??= store().ping().finally(() => { pendingProbe = undefined; });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        probe,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Database readiness timed out.")), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   async clear() { await store().clear(); }
 }

@@ -5,6 +5,7 @@ import { localSessions, localUsers } from "../../db/schema";
 import { readLocalHeaderIdentity, type IdentityRole, type RequestIdentity } from "./identity-trust";
 import { isManagedEnvironment } from "./runtime-env";
 import { readSessionToken } from "./session-token";
+import { erasurePending } from "./account-erasure";
 
 export type { RequestIdentity } from "./identity-trust";
 
@@ -88,7 +89,7 @@ export function publicDemoIdentity(request: Request, managed = isManagedEnvironm
   };
 }
 
-export async function getRequestIdentity(request: Request): Promise<RequestIdentity | null> {
+async function resolveRequestIdentity(request: Request): Promise<RequestIdentity | null> {
   const local = isLocalRequest(request);
   const managed = isManagedEnvironment();
 
@@ -112,6 +113,15 @@ export async function getRequestIdentity(request: Request): Promise<RequestIdent
   }
 
   return publicDemoIdentity(request, managed);
+}
+
+export async function getRequestIdentity(request: Request): Promise<RequestIdentity | null> {
+  const identity = await resolveRequestIdentity(request);
+  if (!identity || identity.role === "viewer") return identity;
+  // Keep the erasure endpoint accessible to the signed caller for recovery.
+  const pathname = new URL(request.url).pathname;
+  if (pathname === "/api/account" || pathname === "/api/auth" && safeDemoMethod(request.method)) return identity;
+  return await erasurePending(identity.email) ? null : identity;
 }
 
 export function unauthorizedResponse() {

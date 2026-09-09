@@ -1,5 +1,4 @@
 import { getDb } from ".";
-import { labAttempts } from "./schema";
 
 let initialization: Promise<void> | null = null;
 
@@ -10,8 +9,7 @@ let initialization: Promise<void> | null = null;
  */
 export function ensureLabSchema() {
   if (!initialization) {
-    initialization = getDb().select({ id: labAttempts.id }).from(labAttempts).limit(1)
-      .then(() => undefined)
+    initialization = getDb().ping()
       .catch((cause: unknown) => {
         initialization = null;
         throw cause;

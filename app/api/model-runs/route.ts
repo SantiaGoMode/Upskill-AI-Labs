@@ -1,3 +1,4 @@
+import { recordOrganization } from "../../lib/organization-scope";
 import { and, desc, eq } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
@@ -5,8 +6,8 @@ import { labAttempts, modelRuns } from "../../../db/schema";
 import { labSources } from "../../lab-data";
 import { curriculumSource } from "../../curriculum-data";
 import { estimateModelCost } from "../../lib/model-pricing";
-import { assertModelBudget, budgetErrorResponse, ModelBudgetError, recordModelUsage } from "../../lib/model-budget";
-import { executeModelProvider, getProviderStatuses, ProviderError } from "../../lib/model-providers";
+import { assertModelBudget, budgetedRoute, budgetErrorResponse, ModelBudgetError } from "../../lib/model-budget";
+import { executeModelProvider, getProviderStatuses, ProviderError, modelForProvider } from "../../lib/model-providers";
 import { serverErrorResponse } from "../../lib/observability";
 import { MAX_PROMPT_CHARS, MAX_SELECTED_SOURCES, readJsonBody } from "../../lib/request-limits";
 import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
@@ -99,7 +100,7 @@ export async function GET(request: Request) {
     if (!identity) return unauthorizedResponse();
     const searchParams = new URL(request.url).searchParams;
     if (searchParams.get("config") === "providers") {
-      const policy = await activePolicy();
+      const policy = await activePolicy(identity.email);
       return Response.json({ providers: getProviderStatuses().map((provider) => ({
         ...provider,
         allowed: permitsProvider(policy, provider.provider),
@@ -126,7 +127,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   try {
     await ensureLabSchema();
     const identity = await getRequestIdentity(request);
@@ -150,11 +151,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    // The daily spend cap refuses the call *after* the one that crossed it, so a
-    // single unbounded prompt would otherwise be billed in full before any
-    // ceiling applied. Bound the request itself rather than truncating it: a
-    // silently shortened prompt would produce a run record that misdescribes
-    // what actually ran.
+    // Keep prompts bounded and reject oversized input without silently changing
+    // the text that the learner expects to send.
     if (prompt.length > MAX_PROMPT_CHARS) {
       return Response.json(
         { error: `A prompt may be at most ${MAX_PROMPT_CHARS.toLocaleString()} characters` },
@@ -170,7 +168,7 @@ export async function POST(request: Request) {
     if (!isModelProvider(provider)) {
       return Response.json({ error: "Unsupported model provider" }, { status: 400 });
     }
-    const policy = await activePolicy();
+    const policy = await activePolicy(identity.email);
     if (!permitsProvider(policy, provider)) {
       return Response.json({ error: `${provider} is not approved by the active governance policy` }, { status: 403 });
     }
@@ -190,7 +188,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await assertModelBudget(identity.email);
+    await assertModelBudget(identity.email, [{ provider, model: modelForProvider(provider) }], "workbench");
 
     const startedAt = new Date();
     const started = performance.now();
@@ -202,7 +200,6 @@ export async function POST(request: Request) {
     });
     const completedAt = new Date();
     const cost = estimateModelCost(provider, result.model, result.usage);
-    await recordModelUsage({ ownerEmail: identity.email, purpose: "workbench", provider, model: result.model, usage: result.usage, cost });
     const trace: ModelRunTrace = {
       responseId: result.responseId,
       provider,
@@ -216,6 +213,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const [row] = await db.insert(modelRuns).values({
       id,
+      organizationId: await recordOrganization(identity.email),
       attemptId,
       responseId: result.responseId,
       model: result.model,
@@ -235,3 +233,5 @@ export async function POST(request: Request) {
     return serverErrorResponse("model-runs.post", error, "The model run could not be completed.");
   }
 }
+
+export const POST = budgetedRoute(handlePost);

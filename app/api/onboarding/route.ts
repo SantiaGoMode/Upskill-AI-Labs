@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   const [map] = await getDb().select().from(workflowMaps).where(eq(workflowMaps.ownerEmail, identity.email)).orderBy(desc(workflowMaps.updatedAt)).limit(1);
   const [instance] = await getDb().select().from(curriculumInstances).where(eq(curriculumInstances.ownerEmail, identity.email)).orderBy(desc(curriculumInstances.updatedAt)).limit(1);
   const [currentExperiment] = map ? await getDb().select().from(redactionExperiments).where(eq(redactionExperiments.workflowMapId, map.id)).orderBy(desc(redactionExperiments.createdAt)).limit(1) : [];
-  return Response.json({ workflowMap: map ? mapRow(map) : null, curriculum: instance ? instanceRow(instance) : null, currentExperiment: currentExperiment ?? null, experiment: await transferSummary(), policy: await activePolicy() });
+  return Response.json({ workflowMap: map ? mapRow(map) : null, curriculum: instance ? instanceRow(instance) : null, currentExperiment: currentExperiment ?? null, experiment: await transferSummary(), policy: await activePolicy(identity.email) });
 }
 
 export async function POST(request: Request) {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     if (body.action === "propose") {
       const tier = String(body.intakeTier ?? "T0") as IntakeTier;
       if (!["T0", "T1", "T2"].includes(tier)) return Response.json({ error: "A valid intake tier is required" }, { status: 400 });
-      const policy = await activePolicy();
+      const policy = await activePolicy(identity.email);
       if (!permitsIntakeTier(policy, tier)) return Response.json({ error: `${tier} intake is not allowed by the active policy` }, { status: 403 });
       if (tier === "T2") return Response.json({ error: "T2 full-artifact intake requires tenant-isolated storage and is not enabled in this local build" }, { status: 501 });
       if ("rawArtifact" in body || "artifactText" in body || "content" in body) return Response.json({ error: "Raw artifact content is never accepted; send a client-side shape only" }, { status: 400 });

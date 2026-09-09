@@ -7,5 +7,10 @@ import { env } from "./server-env";
  */
 export function isManagedEnvironment() {
   const name = env.ENVIRONMENT?.trim().toLowerCase() ?? "";
-  return name !== "" && name !== "development" && name !== "local" && name !== "test";
+  return Boolean(env.K_SERVICE?.trim()) || (name !== "" && name !== "development" && name !== "local" && name !== "test");
+}
+
+/** Emulators exercise Firestore without enabling deployed identity rules. */
+export function usesFirestore() {
+  return isManagedEnvironment() || Boolean(env.FIRESTORE_EMULATOR_HOST?.trim());
 }

@@ -221,7 +221,26 @@ The active governance policy controls:
 - AI disclosure rules
 - Mandatory human-review boundaries
 
-The same policy is enforced by onboarding and live model execution. Policy changes, curriculum review gates, cohort creation, workflow baselines, and measurements produce actor-linked audit events.
+Policies are organization-scoped. Governance administration resolves the facilitator's
+owned organization on the server; a supplied foreign organization ID is rejected.
+Activation atomically retires the previous active profile, advances the version and
+active pointer, and writes the audit event. Saving a draft leaves the active policy
+unchanged. Concurrent saves receive distinct versions.
+
+Onboarding and live model execution resolve owned organizations and active memberships.
+When someone belongs to multiple organizations, provider/data-class permissions are
+intersected and the strictest intake tier applies. Live Room also applies the room
+owner's policy, and judging also applies the artifact owner's policy. People without
+an organization use the safe built-in default. Policy changes, curriculum review
+gates, cohort creation, workflow baselines, and measurements produce actor-linked
+audit events; only explicitly organization-scoped events appear in its governance trail.
+
+Migration is lazy: the first organization policy initialization freezes the highest
+version active legacy global policy as an immutable baseline (or the safe default
+if none exists). Every organization initializes an independent version-one copy.
+Legacy profiles remain intact but are no longer administered as global policies.
+Drain old application instances before rollout so legacy global-policy writers cannot
+race the baseline snapshot or continue global purges.
 
 Synthetic training content should be used for model experiments. Sources labeled Confidential or Regulated must not be sent unless an explicitly activated policy and an appropriate runtime support that data class. The default policy permits only Public and Internal data.
 
@@ -229,7 +248,16 @@ Synthetic training content should be used for model experiments. Sources labeled
 
 The Governance page can delete prompt and model-response records older than the
 policy's retention window on demand: model runs, judge results, regression runs, live
-room cards, and usage events. No scheduled cloud job is created by default, which
+room cards, and usage events, restricted to records explicitly tagged with that
+organization ID. The preview counts the same five categories. Expired session
+cleanup is restricted to the requesting facilitator's own sessions.
+
+New personal model records and usage events receive an organization ID only when
+ownership is unambiguous; room cards use their cohort's organization. Legacy
+unscoped records and ambiguous multi-organization records are intentionally excluded
+from organization-level purges. They remain covered by the learner's account erasure.
+Do not infer tenant ownership from an email or backfill shared records without a
+separate reviewed migration. No scheduled cloud job is created by default, which
 avoids an unnecessary recurring service. Add a scheduled invocation only when the
 deployment needs automatic retention enforcement.
 
@@ -241,11 +269,31 @@ enforce something it does not.
 
 ### Data-subject requests
 
-From `/account`, a learner can export everything held for them as JSON, or erase it.
-Erasure requires typing their own address, removes learner-owned records child-first,
-and leaves a single audit event recording that the erasure happened. The operation is
-idempotent, so retrying safely completes any remainder after a transient failure. Both
-operations act only on the caller's own data.
+From `/account`, a learner can export their application records as JSON, or erase
+them after typing their own address. Export and erasure cover assessment work,
+human reviews, personalized curriculum instances, memberships, enrollments, Live
+Room contributions/presence, intervention notes, and cohort roster entries. Exports
+omit invitation tokens, session identifiers, and peer roster addresses.
+
+Erasure first saves an identifier-only manifest, then commits up to 100 targets and
+their progress checkpoint in each transaction. A fenced two-minute lease prevents
+two workers from advancing the same job. Ordinary failures release the lease for an
+immediate retry; after process death, retry after the lease expires. Already committed
+pages are not repeated. The caller's session remains usable until completion;
+verified sign-in can also issue a session restricted to account recovery.
+
+While deletion is pending, normal requests and guarded learner-record writes are
+refused. Commit-time checks also prevent late requests from recreating deleted work.
+Completion removes remaining sessions and the local account, records one audit event,
+and retains the completion checkpoint. Repeating a completed request returns its
+recorded counts until the account is explicitly recreated. Governance audit history
+and facilitator-owned organizational/curriculum records are retained. This operation
+does not delete the external Google/Firebase Authentication identity.
+
+The adapter's `transaction` API supports atomic document reads/writes/deletes on
+memory and Firestore; callbacks may retry and must read before writing and avoid
+external side effects. This follows [Firestore transaction semantics](https://firebase.google.com/docs/firestore/manage-data/transactions).
+The older `batch` API remains concurrent execution, not an atomic transaction.
 
 ### Model execution limits
 
@@ -257,13 +305,33 @@ ceilings apply before any provider is contacted, so hitting a limit costs nothin
 | Calls per rolling minute | 30 | `MODEL_RATE_LIMIT_PER_MINUTE` |
 | Estimated spend per rolling 24 hours | $5.00 | `MODEL_DAILY_USD_CAP` |
 
-Batches are checked as a whole, so a three-provider judge ensemble or a twenty-case
-regression run is refused up front rather than billed halfway through. Provider
-requests time out after 30 seconds (60 for local Ollama) and retry only on statuses
-that indicate the request was never processed. Set a ceiling to `0` to disable it.
+Batches reserve calls and estimated spend in a per-account transaction before any
+provider is contacted. Concurrent requests share that ledger across server instances.
+Each dispatched call settles its usage and accounting event atomically; unused batch
+slots are released when the request ends. A failed or timed-out call keeps its
+reserved estimate because the provider may already have billed it. If a worker
+stops, four-minute leases release unstarted slots on the next budget operation and
+retain estimates for started calls.
 
-The spend cap refuses the call *after* the one that crossed it, so the size of an
-individual call has to be bounded separately. Request bounds live in
+Reservations use the configured pricing table and a conservative input estimate:
+131,072 UTF-8 bytes plus token-format overhead and at most 800 output tokens per
+call. Dispatch enforces those request bounds. These are estimated-cost controls,
+not a guarantee of provider billing. Unknown-priced models are refused while the
+spend cap is enabled. With the cap disabled, their usage remains explicitly
+unmetered, including in regression totals. Existing usage events seed the ledger
+when it is first created.
+Drain requests from older application versions before rollout so legacy writers
+cannot append usage after that one-time migration has initialized the ledger.
+
+Daily totals use minute buckets and can remain charged up to one extra minute.
+Call accounting retains exact start times for the last minute and counts unstarted
+reservations too. For bounded ledger storage, 100 simultaneous reservations and
+2,000 pending slots/recent calls remain internal ceilings even when configured
+limits are disabled. Budget ledgers are included in account export and erasure.
+
+Provider requests time out after 30 seconds (60 for local Ollama). Only HTTP 429
+is retried; ambiguous transport failures and server errors are not replayed. Set a
+configured ceiling to `0` to disable it. Request bounds also live in
 [`app/lib/request-limits.ts`](./app/lib/request-limits.ts) and apply to every route:
 a 256,000-character body ceiling checked before parsing, an 8,000-character prompt,
 24 sources per run, 40 draft fields, and 500 objects per Live Room whiteboard. An
@@ -288,14 +356,11 @@ scope through it:
 | Curriculum edit, review, approve, publish | Addressed by id *and* owner |
 | Calibration dashboard and judge anchors | Submissions by the caller's enrolled learners |
 | Human review, appeal resolution, judging | The specific submission, checked per call |
-| Governance audit trail | The caller and their learners |
+| Governance policies, audit trail, and retention | The facilitator's owned organization; explicit record provenance |
 
-**Known limitation.** The governance policy itself is a single global record, so an
-activated policy, and the on-demand retention purge, apply across every
-organization. Making policy per-organization needs a schema migration and is not
-done here; until it is, treat facilitator accounts on a shared deployment as
-mutually trusted for policy administration specifically. Curriculum approval has the
-same shape: `approve` and `publish` can be performed by the same facilitator who
+**Known limitation.** There is no explicit workspace picker for a person with multiple
+memberships; personal model records with ambiguous ownership are not time-purged by
+any organization. Curriculum `approve` and `publish` can be performed by the same facilitator who
 authored a version, because an organization with one trainer would otherwise be
 unable to publish at all.
 
@@ -438,6 +503,34 @@ tested in `tests/unit/cross-site.test.ts` and `tests/unit/request-limits.test.ts
 
 ## Firebase deployment
 
+### Persistence contract tests
+
+The same query and mutation contracts run against memory and the real Firestore
+emulator. Install Java 21 and Firebase CLI 15.26.0, then run:
+
+```bash
+npm run test:persistence
+npm run test:firestore
+```
+
+The emulator command starts and stops a dedicated `demo-upskill-contract` project
+using `firebase.test.json`; it does not target the deployed project. Its loopback
+ports are 8181 (Firestore), 9151 (websocket), 4401 (hub), and 4501 (logging).
+This follows Firebase's [demo-project emulator guidance](https://firebase.google.com/docs/emulator-suite/connect_firestore).
+The Firestore test configuration refuses to run without the expected emulator
+address, fixes the project ID, and disables metadata-server discovery. Tests use
+unique collections and clean up only their own records.
+
+Coverage includes numeric filters, compound residual filters, ordering and limits,
+membership queries, aggregates, joins, upserts, projections, readiness, independent
+concurrent writes, transactional increments/rollback, resumable erasure, and rejected Firestore writes. The rejected-write test is skipped
+for memory because it exercises Firestore document-path validation.
+
+CI runs both adapters in a separate Java-enabled job. Emulator behavior does not
+replace staging validation of production IAM, index requirements, or performance.
+
+### Deployment setup
+
 The Firebase configuration targets project `processbridge` and backend
 `upskill-ai-labs`. Releases upload the current local source after it passes local
 validation; `.gitignore` keeps local environment files and build output out of the
@@ -464,7 +557,21 @@ Cloud Run. Firestore is used only by the server. The local validation suite shou
 run before a rollout so cloud builds and live smoke checks stay minimal.
 
 `GET /api/health` reports database and session-secret readiness without revealing
-secret values. It returns `503` when a required dependency is unavailable.
+secret values. It performs a single-document Firestore read (the document need not
+exist), with a three-second response timeout. It returns `503` when a required
+dependency is unavailable and probes again on subsequent requests. Concurrent probes
+share an outstanding database read. `GET /api/health/live` checks process liveness
+without contacting the database.
+
+Persistence and identity share the same managed-environment detection: named
+deployments such as `production`, `staging`, and `preview`, or a Cloud Run
+`K_SERVICE`, use deployed identity rules and Firestore. Local, development, and test
+environments use memory storage unless `FIRESTORE_EMULATOR_HOST` is set. The emulator
+does not by itself enable deployed identity rules.
+
+Playwright starts its own server and explicitly clears model and Meet credentials,
+disables Firebase analytics and realtime, and selects memory storage. An occupied
+test port fails the run instead of reusing an unrelated development server.
 
 ## Project website
 

@@ -2,11 +2,11 @@ import { and, desc, eq, sql } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohortSessions, liveRoomBoardCards, liveRoomParticipants, liveRooms } from "../../../db/schema";
-import { activePolicy, permitsProvider, recordAudit } from "../../lib/governance";
+import { activePolicy, intersectPolicies, permitsProvider, recordAudit } from "../../lib/governance";
 import { liveRoomAccess, notifyLiveRoom } from "../../lib/live-room-access";
-import { assertModelBudget, budgetErrorResponse, ModelBudgetError, recordModelUsage } from "../../lib/model-budget";
+import { assertModelBudget, budgetedRoute, budgetErrorResponse, ModelBudgetError } from "../../lib/model-budget";
 import { estimateModelCost } from "../../lib/model-pricing";
-import { executeModelProvider, getProviderStatuses, ProviderError } from "../../lib/model-providers";
+import { executeModelProvider, getProviderStatuses, ProviderError, modelForProvider } from "../../lib/model-providers";
 import { isModelProvider } from "../../lib/model-run-types";
 import { resolveSourceText } from "../../lib/source-text";
 import { serverErrorResponse } from "../../lib/observability";
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
   return Response.json({ identity, ...view });
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   await ensureLabSchema();
   const identity = await getRequestIdentity(request);
   if (!identity) return unauthorizedResponse();
@@ -194,6 +194,7 @@ export async function POST(request: Request) {
     const [card] = await db.insert(liveRoomBoardCards).values({
       id: crypto.randomUUID(),
       roomId: room.id,
+      organizationId: access.session.organizationId,
       sectionKey: room.currentLabId,
       authorEmail: identity.email,
       body: cardBody.slice(0, 2000),
@@ -266,7 +267,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Select a prompt or workflow card to run" }, { status: 400 });
     }
 
-    const policy = await activePolicy();
+    const policy = intersectPolicies(await Promise.all([activePolicy(identity.email), activePolicy(access.session.ownerEmail)]));
     const provider = body.provider ?? "gemini";
     if (!isModelProvider(provider)) {
       return Response.json({ error: "Unsupported model provider" }, { status: 400 });
@@ -283,7 +284,7 @@ export async function POST(request: Request) {
 
     // A chain is one provider call per step, charged to whoever ran it.
     try {
-      await assertModelBudget(identity.email, steps.length);
+      await assertModelBudget(identity.email, steps.map(() => ({ provider, model: modelForProvider(provider) })), "live-room");
     } catch (error) {
       if (error instanceof ModelBudgetError) return budgetErrorResponse(error);
       throw error;
@@ -313,12 +314,12 @@ export async function POST(request: Request) {
           maxOutputTokens: 700,
         });
         const cost = estimateModelCost(provider, result.model, result.usage);
-        await recordModelUsage({ ownerEmail: identity.email, purpose: "live-room", provider, model: result.model, usage: result.usage, cost });
         produced[step.id] = result.outputText;
 
         const [outputCard] = await db.insert(liveRoomBoardCards).values({
           id: crypto.randomUUID(),
           roomId: room.id,
+          organizationId: access.session.organizationId,
           sectionKey: room.currentLabId,
           authorEmail: identity.email,
           body: result.outputText,
@@ -347,6 +348,7 @@ export async function POST(request: Request) {
         blockedSourceIds: blockedAny,
       });
     } catch (error) {
+      if (error instanceof ModelBudgetError) return budgetErrorResponse(error);
       if (error instanceof ProviderError) return Response.json({ code: error.code, error: error.message }, { status: error.status });
       return serverErrorResponse("live-room.model-run", error, "The model run could not be completed.");
     }
@@ -370,3 +372,5 @@ export async function POST(request: Request) {
   const view = await roomView(sessionId, identity);
   return Response.json({ identity, ...view }, { status: action === "open-room" ? 201 : 200 });
 }
+
+export const POST = budgetedRoute(handlePost);

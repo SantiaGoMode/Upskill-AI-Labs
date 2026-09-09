@@ -259,7 +259,7 @@ function DataRights({ email }: { email: string }) {
         confirmEmail: confirmEmail.trim().toLowerCase(),
       });
       const total = Object.values(result.deleted).reduce((sum, count) => sum + count, 0);
-      setNotice(`Erased ${total} record${total === 1 ? "" : "s"}. Reload to start fresh.`);
+      setNotice(`Erased ${total} record${total === 1 ? "" : "s"}. Sign in again before starting new work.`);
       setConfirmEmail("");
     } catch (cause) {
       setError(errorMessage(cause, "Erasure failed"));
@@ -285,8 +285,8 @@ function DataRights({ email }: { email: string }) {
       <Card className="mt-4 p-5">
         <p className="m-0 text-[15px] font-semibold">Erase this account</p>
         <p className="m-0 mt-1 text-[13px] text-muted">
-          This cannot be undone. Capability claims and their evidence are removed too. A single audit event recording
-          the erasure is retained.
+          This cannot be undone. Capability claims and their evidence are removed too. Governance audit history
+          and an erasure completion record are retained. If interrupted, retry here to finish the deletion.
         </p>
         <TextField
           label="Type your email address to confirm"

@@ -1,11 +1,10 @@
 import { env } from "../../lib/server-env";
-import { sql } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { logWarning } from "../../lib/observability";
 import { isManagedEnvironment } from "../../lib/runtime-env";
 
 /**
- * Unauthenticated liveness and readiness probe for a load balancer or uptime
+ * Unauthenticated readiness probe for a load balancer or uptime
  * check. It reports whether the database answers and whether the secrets a
  * deployment needs are present, without revealing their values.
  */
@@ -13,7 +12,7 @@ export async function GET() {
   const checks: Record<string, "ok" | "unavailable" | "missing"> = {};
 
   try {
-    await getDb().run(sql`select 1`);
+    await getDb().ping();
     checks.database = "ok";
   } catch (error) {
     checks.database = "unavailable";

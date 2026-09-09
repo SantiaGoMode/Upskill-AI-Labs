@@ -14,8 +14,11 @@
     "build:production": "ENVIRONMENT=production next build",
     "deploy": "firebase deploy --only apphosting:upskill-ai-labs --project processbridge --force",
     "data:generate": "node scripts/generate-northwind.mjs",
+    "seed:local": "curl -s -X POST http://localhost:3000/api/dev/seed -H 'Content-Type: application/json' -d '{}'",
     "test": "npm run test:unit && npm run test:api && npm run test:e2e",
     "test:unit": "vitest run --config vitest.config.ts tests/unit",
+    "test:persistence": "vitest run --config vitest.persistence.config.ts",
+    "test:firestore": "firebase emulators:exec --only firestore --project demo-upskill-contract --config firebase.test.json 'PERSISTENCE_CONTRACT_MODE=firestore npm run test:persistence'",
     "test:api": "playwright test api",
     "test:e2e": "playwright test e2e"
   },

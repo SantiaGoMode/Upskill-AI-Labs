@@ -1,7 +1,9 @@
 import { ensureLabSchema } from "../../../db/runtime";
 import { serverErrorResponse } from "../../lib/observability";
 import { readJsonBody } from "../../lib/request-limits";
-import { getRequestIdentity, unauthorizedResponse } from "../../lib/request-identity";
+import { getRequestIdentity, getLocalSessionToken, sessionSecret, unauthorizedResponse } from "../../lib/request-identity";
+import { readSessionToken } from "../../lib/session-token";
+import { ErasureBusyError } from "../../lib/account-erasure";
 import { deleteLearnerData, exportLearnerData } from "../../lib/retention";
 
 /**
@@ -57,12 +59,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const deleted = await deleteLearnerData(identity.email);
+    const sessionId = await readSessionToken(getLocalSessionToken(request), sessionSecret());
+    const deleted = await deleteLearnerData(identity.email, sessionId ?? "");
     return Response.json({
       deleted,
-      note: "Learner records were erased. A single audit event recording this erasure is retained.",
+      note: "Learner records were erased. Governance audit history and an erasure completion record are retained.",
     });
   } catch (error) {
+    if (error instanceof ErasureBusyError) return Response.json({ error: error.message }, { status: 409, headers: { "retry-after": "5" } });
     return serverErrorResponse("account.delete", error, "Your data could not be erased.");
   }
 }

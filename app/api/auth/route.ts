@@ -5,6 +5,7 @@ import { and, eq, inArray } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
 import { ensureLabSchema } from "../../../db/runtime";
 import { cohortEnrollments, cohorts, localSessions, localUsers, organizationMembers } from "../../../db/schema";
+import { createErasureRecoverySession, erasurePending } from "../../lib/account-erasure";
 import {
   configuredDeveloperEmail,
   developerSignInAvailable,
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
     const [member] = await db.select().from(organizationMembers)
       .where(and(eq(organizationMembers.inviteToken, body.inviteToken.trim()), eq(organizationMembers.status, "invited"))).limit(1);
     if (!member) return Response.json({ error: "Invitation is invalid or has already been used" }, { status: 404 });
+    if (await erasurePending(member.email)) return Response.json({ error: "Erasure is pending. Sign in with your existing account to resume it." }, { status: 409 });
     const [existingUser] = await db.select().from(localUsers).where(eq(localUsers.email, member.email)).limit(1);
     if (existingUser?.status === "disabled") return Response.json({ error: "This account has been disabled" }, { status: 403 });
     email = member.email; displayName = member.displayName; role = member.role === "facilitator" ? "facilitator" : "learner";
@@ -124,6 +126,12 @@ export async function POST(request: Request) {
     displayName = body.displayName?.trim() || existing?.displayName || (email === configuredEmail ? "Local facilitator" : email);
   }
 
+  if (await erasurePending(email)) {
+    const sessionId = await createErasureRecoverySession(email, new Date(Date.now() + SESSION_MAX_AGE * 1000).toISOString());
+    const token = await createSessionToken(sessionId, sessionSecret());
+    return Response.json({ identity: { email, displayName, role, source: "local-session" }, erasurePending: true },
+      { status: 201, headers: { "set-cookie": sessionCookie(token, request, SESSION_MAX_AGE) } });
+  }
   await db.insert(localUsers).values({ email, displayName, role }).onConflictDoUpdate({ target: localUsers.email, set: { displayName, role, status: "active", updatedAt: new Date().toISOString() } });
   const sessionId = crypto.randomUUID();
   await db.insert(localSessions).values({ id: sessionId, userEmail: email, expiresAt: new Date(Date.now() + SESSION_MAX_AGE * 1000).toISOString() });

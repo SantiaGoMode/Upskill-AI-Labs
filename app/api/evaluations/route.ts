@@ -1,11 +1,13 @@
 import { and, desc, eq, inArray } from "../../../db/firestore-orm";
 import { getDb } from "../../../db";
+import { activePolicy, intersectPolicies, permitsProvider } from "../../lib/governance";
+import { recordOrganization } from "../../lib/organization-scope";
 import { ensureLabSchema } from "../../../db/runtime";
 import { evalResults, humanReviews, judgeResults, labAttempts, labSubmissions, scoreAppeals } from "../../../db/schema";
 import { aggregateJudges, agreementByDimension, isRubricBand, rubricDimensions, type CalibrationPair, type JudgeEvaluation, type JudgeRecord, type RubricDimension } from "../../lib/hybrid-evaluation";
-import { assertModelBudget, budgetErrorResponse, ModelBudgetError, recordModelUsage } from "../../lib/model-budget";
+import { assertModelBudget, budgetedRoute, budgetErrorResponse, ModelBudgetError } from "../../lib/model-budget";
 import { estimateModelCost } from "../../lib/model-pricing";
-import { executeModelProvider, getProviderStatuses, ProviderError } from "../../lib/model-providers";
+import { executeModelProvider, getProviderStatuses, ProviderError, modelForProvider } from "../../lib/model-providers";
 import { serverErrorResponse } from "../../lib/observability";
 import { hasFacilitatorAccess } from "../../lib/identity-trust";
 import { isModelProvider, type ModelProvider } from "../../lib/model-run-types";
@@ -118,7 +120,7 @@ export async function GET(request: Request) {
   return Response.json({ appeals });
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   try {
     await ensureLabSchema();
     const identity = await getRequestIdentity(request);
@@ -177,7 +179,7 @@ export async function POST(request: Request) {
       if (!await facilitatorOwnsSubmission(identity.email, body.submissionId)) {
         return Response.json({ error: "Submission not found" }, { status: 404 });
       }
-      const [submission] = await getDb().select({ payloadJson: labSubmissions.payloadJson, labId: labAttempts.labId }).from(labSubmissions)
+      const [submission] = await getDb().select({ payloadJson: labSubmissions.payloadJson, labId: labAttempts.labId, ownerEmail: labAttempts.ownerEmail }).from(labSubmissions)
         .innerJoin(labAttempts, eq(labAttempts.id, labSubmissions.attemptId)).where(eq(labSubmissions.id, body.submissionId)).limit(1);
       if (!submission) return Response.json({ error: "Submission not found" }, { status: 404 });
       const configured = new Set(getProviderStatuses().filter((provider) => provider.configured).map((provider) => provider.provider));
@@ -185,6 +187,9 @@ export async function POST(request: Request) {
       if (!requested.every(isModelProvider)) return Response.json({ error: "Unsupported model provider" }, { status: 400 });
       const providers = requested.filter((provider) => configured.has(provider)).slice(0, 3);
       if (providers.length !== 3) return Response.json({ error: "Choose three configured judge providers" }, { status: 400 });
+      const policy = intersectPolicies(await Promise.all([activePolicy(identity.email), activePolicy(submission.ownerEmail)]));
+      if (providers.some((provider) => !permitsProvider(policy, provider))) return Response.json({ error: "A judge provider is not approved by the active governance policy" }, { status: 403 });
+      const organizationId = await recordOrganization(identity.email);
       const artifact = JSON.stringify(parseJson(submission.payloadJson, {}), null, 2);
       // Anchors quote whole learner artifacts into the judge prompt, so they are
       // drawn only from grades this facilitator awarded on their own cohorts.
@@ -196,15 +201,14 @@ export async function POST(request: Request) {
         ? `\n\nFACILITATOR-CALIBRATED ANCHORS\n${calibrationRows.map((anchor, index) => `Anchor ${index + 1}\nArtifact: ${anchor.payloadJson.slice(0, 1800)}\nHuman bands: ${anchor.resultJson}\nCalibration rationale: ${anchor.rationale}`).join("\n\n")}`
         : "\n\nNo facilitator-calibrated anchors exist yet. Apply the published rubric conservatively.";
       // Refuse the whole ensemble up front rather than pay for a partial run.
-      await assertModelBudget(identity.email, providers.length);
-      await getDb().delete(judgeResults).where(eq(judgeResults.submissionId, body.submissionId));
+      await assertModelBudget(identity.email, providers.map((provider) => ({ provider, model: modelForProvider(provider) })), "judge");
+      await getDb().delete(judgeResults).where(and(eq(judgeResults.submissionId, body.submissionId), eq(judgeResults.organizationId, organizationId)));
       const records = [];
       for (const [index, provider] of providers.entries()) {
         const result = await executeModelProvider(provider, { attemptId: body.submissionId, labId: submission.labId, prompt: `Independently grade this learner artifact.\n\n${artifact}${anchors}`, sourceText: "The artifact includes its own supplied-source record and verification note.", systemInstruction: JUDGE_SYSTEM, maxOutputTokens: 550 });
         const evaluation = parseJudgeOutput(result.outputText);
         const cost = estimateModelCost(provider, result.model, result.usage);
-        await recordModelUsage({ ownerEmail: identity.email, purpose: "judge", provider, model: result.model, usage: result.usage, cost });
-        const [row] = await getDb().insert(judgeResults).values({ id: crypto.randomUUID(), submissionId: body.submissionId, provider, model: result.model, judgeIndex: index + 1, resultJson: JSON.stringify(evaluation), usageJson: JSON.stringify(result.usage), costJson: JSON.stringify(cost) }).returning();
+        const [row] = await getDb().insert(judgeResults).values({ id: crypto.randomUUID(), organizationId, submissionId: body.submissionId, provider, model: result.model, judgeIndex: index + 1, resultJson: JSON.stringify(evaluation), usageJson: JSON.stringify(result.usage), costJson: JSON.stringify(cost) }).returning();
         records.push({ ...row, ...evaluation, usage: result.usage, cost });
       }
       return Response.json({ judges: records, dashboard: await dashboard(identity.email) }, { status: 201 });
@@ -216,3 +220,5 @@ export async function POST(request: Request) {
     return serverErrorResponse("evaluations", error, "The evaluation workflow could not be completed.");
   }
 }
+
+export const POST = budgetedRoute(handlePost);

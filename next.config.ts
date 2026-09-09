@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const analyticsEnabled = process.env.NEXT_PUBLIC_FIREBASE_ANALYTICS_ENABLED === "true";
-const scriptSources = ["'self'", "'unsafe-inline'", ...(analyticsEnabled ? ["https://www.googletagmanager.com"] : [])];
+// React's dev-mode call-stack reconstruction (and Turbopack HMR) needs eval();
+// production never uses eval() and stays locked down without it.
+const scriptSources = ["'self'", "'unsafe-inline'", ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'"] : []), ...(analyticsEnabled ? ["https://www.googletagmanager.com"] : [])];
 const connectSources = [
   "'self'",
   "https://accounts.google.com",
